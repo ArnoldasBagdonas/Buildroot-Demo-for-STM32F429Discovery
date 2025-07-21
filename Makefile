@@ -3,7 +3,7 @@
 # -------------------------------------------------------------
 
 # === Board & Buildroot config ===
-BOARD_NAME        := stm32f429discovery
+BOARD_NAME        := stm32f429disco
 BUILDROOT_VERSION := 2024.02.5
 BUILDROOT_DIR     := buildroot
 
@@ -13,8 +13,8 @@ SDK_NAME := arm-buildroot-uclinux-uclibcgnueabi_sdk-buildroot.tar.gz
 
 # === External customization paths ===
 BR2_EXTERNAL_DIR  := $(realpath firmware)
-DEFCONFIG_ALL     := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME)_defconfig_make_all
-DEFCONFIG_SDK     := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME)_defconfig_make_sdk
+DEFCONFIG_ALL     := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME)_defconfig
+DEFCONFIG_SDK     := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME)_sdk_defconfig
 DEFCONFIG_LINUX   := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/linux.config
 DEFCONFIG_BUSYBOX := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/busybox.config
 FLASH_SCRIPT      := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/flash.sh
