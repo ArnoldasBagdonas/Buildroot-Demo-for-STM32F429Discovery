@@ -36,27 +36,20 @@ UART connection pinout:
 | PA10          | USART1_RX   | (TXD)        | RX to board   |
 | GND           | Ground      | (GND)        | Common GND    |
 
-## Buildroot Workflow: Step-by-Step
+## Buildroot Workflow Overview
 
-Buildroot generates a complete Linux system including kernel, root filesystem, toolchain, bootloader, and packages. This is controlled through a configuration file (defconfig) and a Makefile-based system.
+Buildroot automates the creation of complete embedded Linux systems, including the bootloader, toolchain, kernel, root filesystem, and packages. This is managed through `defconfig` files and a `Makefile`-driven build system.
 
-### Typical Buildroot Workflow
+### Primary Build Steps
 
-The standard Buildroot workflow involves the following steps:
+- Set up the source and external trees.
+- Configure Buildroot via provided defconfigs or interactive menus.
+- Build the toolchain, kernel, rootfs, and packages.
+- Flash the target board using `flash.sh`.
+- Maintain kernel/device tree patches in `linux-patches/`.
+- Customize the root filesystem via `rootfs-overlay/`.
 
-- Setting up the Buildroot source directory (`buildroot/`) and external tree (`firmware/`).
-- Configuring Buildroot using provided defconfigs or `make menuconfig` (see Configuration Targets).
-- Building the SDK, root filesystem, kernel, and packages (see Build Targets).
-- Flashing the board using the provided `flash.sh` script (see Flash & Deployment).
-- Maintaining kernel and device tree patches in `linux-patches/`.
-- Customizing the root filesystem via `rootfs-overlay/`.
-- Adding custom packages under `package/`.
-
-For detailed instructions and explanations, see the sections below.
-
-### 1. Project Setup
-
-The project directory structure should be as follows:
+### Project Directory Structure
 
 ```
 workspace/
@@ -82,46 +75,40 @@ workspace/
 └── README.md                  ← This file
 ```
 
-Board and package customizations can be externalized by setting the BR2_EXTERNAL environment variable, for example:
+Board and package customizations may be externalized via:
 
 ```
-BR2_EXTERNAL=myproject
+BR2_EXTERNAL=firmware
 ```
 
-### 2. Configuration Targets
-
-These targets specify what to build and how:
+### Configuration Targets
 
 | Target                      | What it Does                                                                 |
 |-----------------------------|------------------------------------------------------------------------------|
-| `make configure`            | Applies the main Buildroot config (`configs/stm32f429disco_defconfig`)       |
-| `make configure_sdk`        | Applies the SDK Buildroot config (`configs/stm32f429disco_sdk_defconfig`)    |
-| `make menuconfig`           | Opens Buildroot’s TUI menu to configure the global build system              |
-| `make savedefconfig`        | Saves the current Buildroot config to `configs/stm32f429disco_defconfig`     |
-| `make linux-defconfig`      | Applies the Linux kernel config (`board/stm32f429disco/linux.config`)        |
-| `make linux-menuconfig`     | Opens the TUI menu to configure the Linux kernel                             |
-| `make linux-savedefconfig`  | Saves current Linux kernel config to `board/stm32f429disco/linux.config`     |
-| `make busybox-defconfig`    | Applies the BusyBox config (`board/stm32f429disco/busybox.config`)           |
-| `make busybox-menuconfig`   | Opens the TUI menu to configure BusyBox                                      |
-| `make busybox-savedefconfig`| Saves current BusyBox config to `board/stm32f429disco/busybox.config`        |
+| `make configure`            | Loads main Buildroot config (`configs/stm32f429disco_defconfig`)             |
+| `make configure_sdk`        | Loads SDK-specific Buildroot config (`configs/stm32f429disco_sdk_defconfig`) |
+| `make menuconfig`           | Opens Buildroot menu interface                                               |
+| `make savedefconfig`        | Saves current Buildroot config back to `configs/stm32f429disco_defconfig`    |
+| `make savedefconfig_sdk`    | Saves current Buildroot config back to `configs/stm32f429disco_defconfig_sdk`|
+| `make linux-menuconfig`     | Opens kernel config interface                                                |
+| `make linux-savedefconfig`  | Saves kernel config to `board/stm32f429disco/linux.config`                   |
+| `make busybox-menuconfig`   | Opens BusyBox configuration                                                  |
+| `make busybox-savedefconfig`| Saves BusyBox config to `board/stm32f429disco/busybox.config`                |
 
+### Build Targets
 
-### 3. Build Targets
+| Target          | What it Does                                                    |
+|-----------------|-----------------------------------------------------------------|
+| `make`          | Full system build: toolchain, kernel, rootfs, and packages      |
+| `make buildroot`| Downloads/prepares Buildroot in `buildroot/`                    |
+| `make sdk`      | Builds the standalone SDK to  `buildroot-sdk/`                  |
+| `make toolchain`| Builds only the cross-toolchain                                 |
+| `make linux`    | Compiles the Linux kernel                                       |
+| `make busybox`  | Compiles BusyBox                                                |
+| `make uboot`    | Builds U-Boot bootloader (if enabled)                           |
+| `make <pkg>`    | Builds an individual package                                    |
 
-After configuration, these targets start the build process:
-
-| Target          | What it Does                                                                             |
-|-----------------|------------------------------------------------------------------------------------------|
-| `make`          | Performs a full build: toolchain, kernel, root filesystem, and all enabled packages      |
-| `make buildroot`| Downloads and prepares Buildroot (cloned or copied into the `buildroot/` directory)      |
-| `make sdk`      | Builds only the SDK/toolchain and installs it to `buildroot-sdk/`                        |
-| `make toolchain`| Builds only the cross-compilation toolchain                                              |
-| `make linux`    | Builds the Linux kernel                                                                  |
-| `make busybox`  | Builds BusyBox (userland utilities)                                                      |
-| `make uboot`    | Builds U-Boot bootloader (if enabled in configuration)                                   |
-| `make <pkg>`    | Builds a specific Buildroot package (e.g., `make my_package`)                            |
-
-### 4. Example Build Timeline (Simplified)
+### Simplified Build Timeline
 
 Running `make` triggers these steps in Buildroot:
 
@@ -142,7 +129,7 @@ make
 └── Run post-genext2fs script (board/<boardname>/post-genext2fs.sh) (optional)
 ```
 
-### 5. Package Lifecycle & Hooks
+### Package Lifecycle & Hooks
 
 Buildroot packages define lifecycle hooks using define <PKG>_<STAGE>_CMDS in .mk files. These control how packages are built and integrated.
 
@@ -161,24 +148,25 @@ Buildroot packages define lifecycle hooks using define <PKG>_<STAGE>_CMDS in .mk
 
 See [Buildroot manual on package development](https://buildroot.org/downloads/manual/manual.html#generic-package-reference).
 
-### 6. Pre-/Post- Build System Hooks
+### Pre-/Post- Build System Hooks
 
-Global build stages can be hooked by adding scripts in the board directory:
+Global hooks can be defined per board:
 
-| Hook File                            | When It Runs                           |
-|--------------------------------------|----------------------------------------|
-| `board/<boardname>/post-build.sh`    | After root filesystem is populated     |
-| `board/<boardname>/post-image.sh`    | After images are generated             |
-| `board/<boardname>/post-genext2fs.sh`| Before `.ext2` filesystem is finalized |
+| Hook File                            | When It Runs                                 |
+|--------------------------------------|----------------------------------------------|
+| `board/<boardname>/pre-build.sh`     | Runs before the root filesystem is populated |
+| `board/<boardname>/post-build.sh`    | Runs after populating `output/target/`       |
+| `board/<boardname>/post-image.sh`    | Runs after image creation                    |
+| `board/<boardname>/post-genext2fs.sh`| Runs before finalizing `.ext2` image         |
 
-Enable these hooks in the Buildroot defconfig by adding:
+Enable these by declaring in defconfig:
 
 ```makefile
 BR2_ROOTFS_POST_BUILD_SCRIPT="board/boardname/post-build.sh"
 BR2_ROOTFS_POST_IMAGE_SCRIPT="board/boardname/post-image.sh"
 ```
 
-### 7. Root Filesystem & Overlay
+### Root Filesystem Overlay
 
 Buildroot generates a root filesystem in:
 
@@ -186,46 +174,43 @@ Buildroot generates a root filesystem in:
 output/target/
 ```
 
-Static files such as configs, scripts, or services can be overlaid from:
+Overlay files placed in:
 
 ```
 BR2_ROOTFS_OVERLAY = board/boardname/rootfs-overlay
 ```
+are copied directly into the final root filesystem at `output/target/`.
 
-All contents of this directory are copied as-is into `output/target/`.
+### Output Image Artifacts
 
-### 8. Image Generation
+Final image files are located under `output/images/`.
 
-After building, final system images are placed in the `output/images/` directory.
+| File Type                    | Path               | Description                                |
+|------------------------------|--------------------|--------------------------------------------|
+| `zImage` / `uImage`          | `output/images/`   | Compressed Linux kernel image              |
+| `rootfs.ext2`, `.cpio`, etc. | `output/images/`   | Root filesystem in various formats         |
+| `sdcard.img` / `.tar`        | `output/images/`   | Optional prebuilt SD card image or archive |
+| `sdk.tar.gz`                 | `output/images/`   | Prebuilt toolchain and sysroot archive     |
 
-| File Type                     | Path               | Description                                             |
-|------------------------------|--------------------|---------------------------------------------------------|
-| `zImage` / `uImage`          | `output/images/`   | Compressed Linux kernel image (ARM targets)             |
-| `rootfs.ext2`, `.cpio`, etc. | `output/images/`   | Root filesystem images in various formats               |
-| `sdcard.img` / `.tar`        | `output/images/`   | Optional SD card image or tarball for deployment        |
-| `sdk.tar.gz`                 | `output/images/`   | SDK tarball containing toolchain and sysroot            |
+### Rebuilding & Cleaning Targets
 
-### 9. Rebuilding & Cleaning Targets
+| Target                | Description                                        |
+|-----------------------|----------------------------------------------------|
+| `make clean`          | Removes all output files except downloaded sources |
+| `make distclean`      | Full clean including configs and downloads         |
+| `make clean-rootfs`   | Cleans `target/`                                   |
+| `make rebuild-rootfs` | Rebuilds root filesystem                           |
+| `make linux-rebuild`  | Rebuilds Linux kernel                              |
+| `make busybox-rebuild`| Rebuilds BusyBox                                   |
+| `make <pkg>-rebuild`  | Rebuilds a specified package                       |
 
-These targets are available to clean or force rebuild specific components:
-
-| Target                | Description                                                     |
-|-----------------------|-----------------------------------------------------------------|
-| `make clean`          | Cleans all build output, but keeps downloads                    |
-| `make distclean`      | Full clean: removes `output/`, downloads, `.config`, etc.       |
-| `make clean-rootfs`   | Cleans `target/`                                                |
-| `make rebuild-rootfs` | Forces a full rebuild of the root filesystem (cleans `target/`) |
-| `make linux-rebuild`  | Forces a full rebuild of the Linux kernel                       |
-| `make busybox-rebuild`| Forces a rebuild of BusyBox                                     |
-| `make <pkg>-rebuild`  | Rebuilds any specific package (e.g., `make mypkg-rebuild`)      |
-
-### 10. Flash & Deployment (Custom Targets)
+### Flashing & Deployment
 
 Buildroot does not include built-in flash or deployment targets. Custom targets can be added to the project’s `Makefile` to handle flashing or deploying build artifacts.
 
 Tools such as [stlink](https://github.com/stlink-org/stlink), `dfu-util`, [openocd](https://github.com/openocd-org/openocd), `scp`, or `rsync` can be used to implement flashing or deployment commands.
 
-Example usage:
+Example flash command:
 
 ```bash
 sudo make flash
@@ -233,20 +218,66 @@ sudo make flash
 
 ## Getting Started
 
-- Clone the repository:
-  ```
-  git clone https://gitlab.com/bagdoportfolio/buildroot-stm32f429-discovery-demo.git
-  cd buildroot-stm32f429-discovery-demo
-  ```
+Clone the repository:
+```
+git clone https://gitlab.com/bagdoportfolio/buildroot-stm32f429-discovery-demo.git
+cd buildroot-stm32f429-discovery-demo
+```
 
-- Follow the USB Setup Workflow above, then start the devcontainer.
+Start the devcontainer **after** attaching USB devices as described above.
 
-- Build the project as described.
-  ```
-  make all
-  ```
+Build and deploy using:
 
-- Flash the STM32F429Discovery board.
+```
+make all
+sudo make flash
+```
+
+## References
+
+### Buildroot Official Resources
+
+- Project Website
+  
+  [https://buildroot.org](https://buildroot.org)
+
+- Buildroot Git Repository (official mirror)
+  
+  [https://github.com/buildroot/buildroot](https://github.com/buildroot/buildroot)
+
+- Buildroot Manual (Latest Release)
+  
+  [https://buildroot.org/downloads/manual/manual.html](https://buildroot.org/downloads/manual/manual.html)
+
+- Buildroot Configuration System Overview
+  
+  [https://buildroot.org/downloads/manual/manual.html#configure](https://buildroot.org/downloads/manual/manual.html#configure)
+
+- Buildroot Developer Manual (Package Guidelines, Staging, Overlays)
+  
+  [https://buildroot.org/downloads/manual/manual.html#_developer_guide](https://buildroot.org/downloads/manual/manual.html#_developer_guide)
+
+### Bootlin Training & Educational Materials
+
+- Bootlin Embedded Linux Training (PDF Slides)
+  
+  [https://bootlin.com/doc/training/buildroot/buildroot-slides.pdf](https://bootlin.com/doc/training/buildroot/buildroot-slides.pdf)
+
+- Bootlin Buildroot Training Git Repository
+  
+  [https://github.com/bootlin/training-materials](https://github.com/bootlin/training-materials)
+
+- Bootlin Buildroot Labs (Hands-on exercises)
+
+  [https://bootlin.com/doc/training/buildroot/buildroot-labs.pdf](https://bootlin.com/doc/training/buildroot/buildroot-labs.pdf)
+
+- Bootlin YouTube Channel (Video Courses and Talks)
+  
+  [https://www.youtube.com/@Bootlin](https://www.youtube.com/@Bootlin)
+
+- Bootlin Training Page
+
+  [https://bootlin.com/training/buildroot/](https://bootlin.com/training/buildroot/)
 
 ## License
 
