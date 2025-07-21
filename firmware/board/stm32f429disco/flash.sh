@@ -1,7 +1,9 @@
 #!/bin/bash
 
 OUTPUT_DIR=$1
-BOARD_NAME=${2:-stm32f429discovery}
+#BOARD_NAME=${2:-stm32f429discovery}
+BOARD_NAME=stm32f429discovery  # Override here, hardcoded
+
 
 if ! test -d "${OUTPUT_DIR}" ; then
     echo "ERROR: no output directory specified."
