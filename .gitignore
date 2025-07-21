@@ -1,0 +1,5 @@
+# Ignore all contents of the folders
+buildroot/
+buildroot-downloads/
+buildroot-ccache/
+buildroot-sdk/

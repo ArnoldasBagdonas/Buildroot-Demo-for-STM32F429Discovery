@@ -1,0 +1,13 @@
+sphinx
+jinja2
+markupsafe
+breathe
+exhale
+sphinx-rtd-theme
+sphinx-sitemap
+myst_parser
+sphinx-needs
+sphinxcontrib-plantuml
+matplotlib
+mlx.traceability
+pyelftools

@@ -1,0 +1,6 @@
+config BR2_PACKAGE_GPIODEVENT
+    bool "libgpiod event example"
+    select BR2_PACKAGE_LIBGPIOD
+    help
+      This is an event (triggered from interrupt) example application using libgpiod.
+      It can be compiled and executed on Linux systems with GPIO support.

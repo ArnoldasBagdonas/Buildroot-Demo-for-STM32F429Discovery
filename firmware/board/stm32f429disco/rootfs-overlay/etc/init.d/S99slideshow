@@ -1,0 +1,11 @@
+#!/bin/sh
+
+echo "Start slideshow script on boot"
+
+# Check if fbv is installed
+if command -v fbv >/dev/null 2>&1; then
+  echo "fbv found: launching slideshow script."
+  /usr/bin/slideshow.sh &
+else
+  echo "fbv not found: slideshow script will not start."
+fi

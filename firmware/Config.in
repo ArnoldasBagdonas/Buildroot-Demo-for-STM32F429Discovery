@@ -1,0 +1,5 @@
+source "$BR2_EXTERNAL_FIRMWARE_PATH/package/hellomk/Config.in"
+source "$BR2_EXTERNAL_FIRMWARE_PATH/package/hellomkcpp/Config.in"
+source "$BR2_EXTERNAL_FIRMWARE_PATH/package/gpiodio/Config.in"
+source "$BR2_EXTERNAL_FIRMWARE_PATH/package/gpiodevent/Config.in"
+source "$BR2_EXTERNAL_FIRMWARE_PATH/package/gpiodscan/Config.in"

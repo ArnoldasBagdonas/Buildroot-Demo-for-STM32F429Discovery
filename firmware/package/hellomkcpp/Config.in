@@ -1,0 +1,4 @@
+config BR2_PACKAGE_HELLOMKCPP
+    bool "Hello Makefile C++"
+    help
+      This is a sample configuration for the Hello Makefile C++ package.

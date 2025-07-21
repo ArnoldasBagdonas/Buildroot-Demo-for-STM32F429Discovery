@@ -1,0 +1,57 @@
+// For format details, see https://aka.ms/devcontainer.json. 
+// For configuration options, see the README at: https://github.com/devcontainers/templates/tree/main/src/cpp
+
+{
+    "name": "C++ Development Environment",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+	"customizations":{
+		"vscode":{
+			"extensions": [
+				"ms-vscode.cpptools-extension-pack",
+				"mhutchie.git-graph",
+				"hediet.vscode-drawio",
+				"ms-python.python",
+				"streetsidesoftware.code-spell-checker",
+
+				//"ms-vscode.cmake-tools",
+				//"ms-vscode.cpptools",
+				//"twxs.cmake",
+				//"ms-vscode.cpptools-extension-pack",
+				//"vector-of-bool.cmake-tools-helper",
+				//"jeff-hykin.better-cpp-syntax",
+				//"mhutchie.git-graph",
+				//"hediet.vscode-drawio",
+				//"ms-python.python",
+				//"streetsidesoftware.code-spell-checker",
+				//"alefragnani.bookmarks"
+			], 
+			"settings": {
+				"cmake.configureSettings": {
+					"CMAKE_BUILD_TYPE": "Debug"
+				}
+			}
+		}
+	},
+	"overrideCommand": false, // do not overide entry point in Dockerfile
+	// To attach a physical USB device, follow the instructions at:
+	// https://learn.microsoft.com/en-us/windows/wsl/connect-usb
+    "runArgs": [
+        "--privileged",
+        "--device=/dev/bus/usb:/dev/bus/usb"
+    ],
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+    "workspaceFolder": "/workspace",
+    "postCreateCommand": "git config --global core.autocrlf input && git config --global --add safe.directory /workspace && git config --global --add safe.directory /workspace/buildroot && sudo bash /workspace/.devcontainer/entrypoint.sh",
+    
+	// Uncomment the following line to run the container as the 'vscode' user. 
+    // Note: The USB device remains owned by root:root with crw------- permissions inside the container. 
+    // Even though the 'vscode' user is part of the root group, these permissions prevent the 'vscode' user from accessing the USB device.
+    
+	"remoteUser": "vscode" /* Running as 'root' is not allowed when using Buildroot. */
+	//"remoteUser": "root" /* Running as 'root' allows access to the USB device due to root ownership and restrictive permissions. */
+	
+	// Set all permissions (read, write, and execute) for the owner, group, and others
+	// if you created the file as the root user: chmod 777 /workspace/my-file.ext
+}

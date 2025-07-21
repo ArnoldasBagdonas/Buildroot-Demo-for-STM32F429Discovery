@@ -1,93 +1,253 @@
-# Buildroot STM32F429 Discovery Demo
+# Buildroot Demo for STM32F429Discovery
 
+This project provides a structured and automated environment for building a fully customized Linux system using [Buildroot 2024.02](https://buildroot.org) (Linux 6.1+) for the [STM32F429Discovery](https://www.st.com/en/evaluation-tools/32f429idiscovery.html) board.
 
+## USB Setup Workflow for WSL2 + Devcontainer
 
-## Getting started
+> **Important**: The USB device must be connected and attached to WSL **before launching the devcontainer or Docker image**.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+WSL (Windows Subsystem for Linux) enables running a Linux environment on a Windows host. However, [connecting USB devices](https://learn.microsoft.com/en-us/windows/wsl/connect-usb) to WSL requires specific setup. The following steps describe how a USB device, such as the STM32F4 Discovery board, can be made accessible within WSL and the devcontainer environment.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+Before starting the development container, mount the ST-LINK device using the provided PowerShell script (run as Administrator):
 
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.com/bagdoportfolio/buildroot-stm32f429-discovery-demo.git
-git branch -M main
-git push -uf origin main
+```bash
+scripts/stlink-powershell.bat
 ```
 
-## Integrate with your tools
+This script attaches the ST-LINK USB interface to WSL, enabling USB serial and debug access inside the devcontainer.
 
-- [ ] [Set up project integrations](https://gitlab.com/bagdoportfolio/buildroot-stm32f429-discovery-demo/-/settings/integrations)
+## Hardware Serial Console Connection
 
-## Collaborate with your team
+> ⚠️ Voltage levels should match (most adapters support 3.3V I/O).
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+Interacting with the bootloader and uCLinux running on the STM32F429Discovery requires a serial console. Serial console settings:
 
-## Test and Deploy
+- **Baud Rate**: 115200
+- **Data Bits**: 8
+- **Parity**: None
+- **Stop Bits**: 1
+- **Flow Control**: None
 
-Use the built-in continuous integration in GitLab.
+UART connection pinout:
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+| STM32F429 Pin | Function    | ext USB UART | Notes         |
+|---------------|-------------|--------------|---------------|
+| PA9           | USART1_TX   | (RXD)        | TX from board |
+| PA10          | USART1_RX   | (TXD)        | RX to board   |
+| GND           | Ground      | (GND)        | Common GND    |
 
-***
+## Buildroot Workflow: Step-by-Step
 
-# Editing this README
+Buildroot generates a complete Linux system including kernel, root filesystem, toolchain, bootloader, and packages. This is controlled through a configuration file (defconfig) and a Makefile-based system.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### Typical Buildroot Workflow
 
-## Suggestions for a good README
+The standard Buildroot workflow involves the following steps:
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+- Setting up the Buildroot source directory (`buildroot/`) and external tree (`firmware/`).
+- Configuring Buildroot using provided defconfigs or `make menuconfig` (see Configuration Targets).
+- Building the SDK, root filesystem, kernel, and packages (see Build Targets).
+- Flashing the board using the provided `flash.sh` script (see Flash & Deployment).
+- Maintaining kernel and device tree patches in `linux-patches/`.
+- Customizing the root filesystem via `rootfs-overlay/`.
+- Adding custom packages under `package/`.
 
-## Name
-Choose a self-explaining name for your project.
+For detailed instructions and explanations, see the sections below.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+### 1. Project Setup
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+The project directory structure should be as follows:
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+```
+workspace/
+├── buildroot/                 ← Buildroot source (submodule or cloned)
+├── buildroot-sdk/             ← SDK output directory (gitignored)
+├── buildroot-ccache/          ← ccache directory (gitignored)
+├── buildroot-downloads/       ← Downloads directory (gitignored)
+├── firmware/
+│   ├── board/stm32f429disco/             ← Board-specific configs and custom files
+│   │   ├── linux.config                  ← Custom Linux kernel configuration file
+│   │   ├── busybox.config                ← Custom BusyBox configuration file
+│   │   ├── flash.sh                      ← Flashing script for programming the board
+│   │   ├── rootfs-overlay/               ← Files to overlay on the target root filesystem
+│   │   ├── dts/                          ← Device Tree Source files for hardware description
+│   │   └── linux-patches/                ← Kernel patch files and helper scripts
+│   ├── configs/                          ← Buildroot defconfigs
+│   │   ├── stm32f429disco_defconfig      ← Main Buildroot configuration for the board
+│   │   └── stm32f429disco_sdk_defconfig  ← Buildroot configuration for SDK/toolchain generation
+│   └── package/                          ← Custom Buildroot packages for additional software
+├── scripts/
+│   └── stlink-powershell.bat  ← PowerShell script to attach STLink debugger to WSL (run as admin)
+├── Makefile                   ← Top-level automation wrapper
+└── README.md                  ← This file
+```
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Board and package customizations can be externalized by setting the BR2_EXTERNAL environment variable, for example:
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```
+BR2_EXTERNAL=myproject
+```
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### 2. Configuration Targets
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+These targets specify what to build and how:
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+| Target                      | What it Does                                                                 |
+|-----------------------------|------------------------------------------------------------------------------|
+| `make configure`            | Applies the main Buildroot config (`configs/stm32f429disco_defconfig`)       |
+| `make configure_sdk`        | Applies the SDK Buildroot config (`configs/stm32f429disco_sdk_defconfig`)    |
+| `make menuconfig`           | Opens Buildroot’s TUI menu to configure the global build system              |
+| `make savedefconfig`        | Saves the current Buildroot config to `configs/stm32f429disco_defconfig`     |
+| `make linux-defconfig`      | Applies the Linux kernel config (`board/stm32f429disco/linux.config`)        |
+| `make linux-menuconfig`     | Opens the TUI menu to configure the Linux kernel                             |
+| `make linux-savedefconfig`  | Saves current Linux kernel config to `board/stm32f429disco/linux.config`     |
+| `make busybox-defconfig`    | Applies the BusyBox config (`board/stm32f429disco/busybox.config`)           |
+| `make busybox-menuconfig`   | Opens the TUI menu to configure BusyBox                                      |
+| `make busybox-savedefconfig`| Saves current BusyBox config to `board/stm32f429disco/busybox.config`        |
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### 3. Build Targets
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+After configuration, these targets start the build process:
+
+| Target          | What it Does                                                                             |
+|-----------------|------------------------------------------------------------------------------------------|
+| `make`          | Performs a full build: toolchain, kernel, root filesystem, and all enabled packages      |
+| `make buildroot`| Downloads and prepares Buildroot (cloned or copied into the `buildroot/` directory)      |
+| `make sdk`      | Builds only the SDK/toolchain and installs it to `buildroot-sdk/`                        |
+| `make toolchain`| Builds only the cross-compilation toolchain                                              |
+| `make linux`    | Builds the Linux kernel                                                                  |
+| `make busybox`  | Builds BusyBox (userland utilities)                                                      |
+| `make uboot`    | Builds U-Boot bootloader (if enabled in configuration)                                   |
+| `make <pkg>`    | Builds a specific Buildroot package (e.g., `make my_package`)                            |
+
+### 4. Example Build Timeline (Simplified)
+
+Running `make` triggers these steps in Buildroot:
+
+```
+make
+├── Apply defconfig
+├── Build host tools
+├── Build toolchain
+├── Fetch and extract source packages
+├── Apply patches
+├── Configure packages
+├── Build packages (BusyBox, kernel, etc.)
+├── Run pre-build script (board/<boardname>/pre-build.sh) (optional)
+├── Populate target/ filesystem
+├── Run post-build script (board/<boardname>/post-build.sh) (optional)
+├── Generate images (cpio, ext2, etc.)
+├── Run post-image script (board/<boardname>/post-image.sh) (optional)
+└── Run post-genext2fs script (board/<boardname>/post-genext2fs.sh) (optional)
+```
+
+### 5. Package Lifecycle & Hooks
+
+Buildroot packages define lifecycle hooks using define <PKG>_<STAGE>_CMDS in .mk files. These control how packages are built and integrated.
+
+| Hook (Make Variable)                 | When It Runs                         | Example Use                                              |
+|--------------------------------------|--------------------------------------|----------------------------------------------------------|
+| `<PKG>_DOWNLOAD_CMDS`                | Before source is downloaded          | Override source fetching (e.g., from a custom mirror)    |
+| `<PKG>_EXTRACT_CMDS`                 | After download, before extraction    | Custom extract logic (e.g., unzip, custom script)        |
+| `<PKG>_PATCH_CMDS`                   | After extract, before build          | Apply patch files manually                               |
+| `<PKG>_CONFIGURE_CMDS`               | Before compilation begins            | Run `./configure` or CMake manually                      |
+| `<PKG>_BUILD_CMDS`                   | Build step (compilation)             | Invoke `make`, `cmake`, or other compile logic           |
+| `<PKG>_INSTALL_CMDS`                 | Install to both host and target      | Place files into Buildroot’s staging dirs                |
+| `<PKG>_INSTALL_TARGET_CMDS`          | Install only to root filesystem      | Copy runtime binaries to `$(TARGET_DIR)/usr/bin` etc.    |
+| `<PKG>_INSTALL_STAGING_CMDS`         | Install headers/libraries to host    | For SDK/dev usage — install to `$(STAGING_DIR)`          |
+| `<PKG>_POST_INSTALL_TARGET_HOOKS`    | After target install                 | Cleanup, strip binaries, register steps                  |
+| `<PKG>_POST_INSTALL_STAGING_HOOKS`   | After staging install                | Staging tweaks, symlinks, special headers                |
+
+See [Buildroot manual on package development](https://buildroot.org/downloads/manual/manual.html#generic-package-reference).
+
+### 6. Pre-/Post- Build System Hooks
+
+Global build stages can be hooked by adding scripts in the board directory:
+
+| Hook File                            | When It Runs                           |
+|--------------------------------------|----------------------------------------|
+| `board/<boardname>/post-build.sh`    | After root filesystem is populated     |
+| `board/<boardname>/post-image.sh`    | After images are generated             |
+| `board/<boardname>/post-genext2fs.sh`| Before `.ext2` filesystem is finalized |
+
+Enable these hooks in the Buildroot defconfig by adding:
+
+```makefile
+BR2_ROOTFS_POST_BUILD_SCRIPT="board/boardname/post-build.sh"
+BR2_ROOTFS_POST_IMAGE_SCRIPT="board/boardname/post-image.sh"
+```
+
+### 7. Root Filesystem & Overlay
+
+Buildroot generates a root filesystem in:
+
+```
+output/target/
+```
+
+Static files such as configs, scripts, or services can be overlaid from:
+
+```
+BR2_ROOTFS_OVERLAY = board/boardname/rootfs-overlay
+```
+
+All contents of this directory are copied as-is into `output/target/`.
+
+### 8. Image Generation
+
+After building, final system images are placed in the `output/images/` directory.
+
+| File Type                     | Path               | Description                                             |
+|------------------------------|--------------------|---------------------------------------------------------|
+| `zImage` / `uImage`          | `output/images/`   | Compressed Linux kernel image (ARM targets)             |
+| `rootfs.ext2`, `.cpio`, etc. | `output/images/`   | Root filesystem images in various formats               |
+| `sdcard.img` / `.tar`        | `output/images/`   | Optional SD card image or tarball for deployment        |
+| `sdk.tar.gz`                 | `output/images/`   | SDK tarball containing toolchain and sysroot            |
+
+### 9. Rebuilding & Cleaning Targets
+
+These targets are available to clean or force rebuild specific components:
+
+| Target                | Description                                                     |
+|-----------------------|-----------------------------------------------------------------|
+| `make clean`          | Cleans all build output, but keeps downloads                    |
+| `make distclean`      | Full clean: removes `output/`, downloads, `.config`, etc.       |
+| `make clean-rootfs`   | Cleans `target/`                                                |
+| `make rebuild-rootfs` | Forces a full rebuild of the root filesystem (cleans `target/`) |
+| `make linux-rebuild`  | Forces a full rebuild of the Linux kernel                       |
+| `make busybox-rebuild`| Forces a rebuild of BusyBox                                     |
+| `make <pkg>-rebuild`  | Rebuilds any specific package (e.g., `make mypkg-rebuild`)      |
+
+### 10. Flash & Deployment (Custom Targets)
+
+Buildroot does not include built-in flash or deployment targets. Custom targets can be added to the project’s `Makefile` to handle flashing or deploying build artifacts.
+
+Tools such as [stlink](https://github.com/stlink-org/stlink), `dfu-util`, [openocd](https://github.com/openocd-org/openocd), `scp`, or `rsync` can be used to implement flashing or deployment commands.
+
+Example usage:
+
+```bash
+sudo make flash
+```
+
+## Getting Started
+
+- Clone the repository:
+  ```
+  git clone https://gitlab.com/bagdoportfolio/buildroot-stm32f429-discovery-demo.git
+  cd buildroot-stm32f429-discovery-demo
+  ```
+
+- Follow the USB Setup Workflow above, then start the devcontainer.
+
+- Build the project as described.
+  ```
+  make all
+  ```
+
+- Flash the STM32F429Discovery board.
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+This repository is licensed under the MIT License. See the LICENSE file for details.

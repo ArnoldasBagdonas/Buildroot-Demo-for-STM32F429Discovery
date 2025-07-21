@@ -1,0 +1,10 @@
+{
+    //Configure VS Code to use Unix-style line endings (LF) by default for all new files
+    "files.autoGuessEncoding": false,
+    "files.eol": "\n",
+    
+    //Automatically convert line endings to LF every time you save a file
+    "editor.codeActionsOnSave": {
+            "source.fixAll": "always"
+    }
+}

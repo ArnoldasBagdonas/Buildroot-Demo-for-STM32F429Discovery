@@ -1,0 +1,4 @@
+config BR2_PACKAGE_HELLOMK
+    bool "Hello Makefile"
+    help
+      This is a sample configuration for the Hello Makefile package.
