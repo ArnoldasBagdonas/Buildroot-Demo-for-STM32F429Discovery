@@ -50,7 +50,7 @@ Buildroot automates the creation of complete embedded Linux systems, including t
 - Customize the root filesystem via `rootfs-overlay/`.
 
 ### Project Directory Structure
-
+> **Note**: The directories `buildroot-ccache/` and `buildroot-downloads/` are created automatically and used to optimize caching and downloads. These are gitignored by default.
 ```
 workspace/
 ├── buildroot/                 ← Buildroot source (submodule or cloned)
@@ -66,8 +66,9 @@ workspace/
 │   │   ├── dts/                          ← Device Tree Source files for hardware description
 │   │   └── linux-patches/                ← Kernel patch files and helper scripts
 │   ├── configs/                          ← Buildroot defconfigs
-│   │   ├── stm32f429disco_defconfig      ← Main Buildroot configuration for the board
-│   │   └── stm32f429disco_sdk_defconfig  ← Buildroot configuration for SDK/toolchain generation
+│   │   ├── stm32f429disco.defconfig      ← Main Buildroot configuration for the board
+│   │   ├── stm32f429disco_sdk.defconfig  ← Buildroot configuration for SDK/toolchain generation
+│   │   └── README.md                     ← Buildroot Configuration Guide
 │   └── package/                          ← Custom Buildroot packages for additional software
 ├── scripts/
 │   └── stlink-powershell.bat  ← PowerShell script to attach STLink debugger to WSL (run as admin)
@@ -85,11 +86,11 @@ BR2_EXTERNAL=firmware
 
 | Target                      | What it Does                                                                 |
 |-----------------------------|------------------------------------------------------------------------------|
-| `make configure`            | Loads main Buildroot config (`configs/stm32f429disco_defconfig`)             |
-| `make configure_sdk`        | Loads SDK-specific Buildroot config (`configs/stm32f429disco_sdk_defconfig`) |
+| `make configure`            | Loads main Buildroot config (`configs/stm32f429disco.defconfig`)             |
+| `make sdk-configure`        | Loads SDK-specific Buildroot config (`configs/stm32f429disco_sdk.defconfig`) |
 | `make menuconfig`           | Opens Buildroot menu interface                                               |
-| `make savedefconfig`        | Saves current Buildroot config back to `configs/stm32f429disco_defconfig`    |
-| `make savedefconfig_sdk`    | Saves current Buildroot config back to `configs/stm32f429disco_defconfig_sdk`|
+| `make savedefconfig`        | Saves current Buildroot config back to `configs/stm32f429disco.defconfig`    |
+| `make sdk-savedefconfig`    | Saves current Buildroot config back to `configs/stm32f429disco_sdk.defconfig`|
 | `make linux-menuconfig`     | Opens kernel config interface                                                |
 | `make linux-savedefconfig`  | Saves kernel config to `board/stm32f429disco/linux.config`                   |
 | `make busybox-menuconfig`   | Opens BusyBox configuration                                                  |

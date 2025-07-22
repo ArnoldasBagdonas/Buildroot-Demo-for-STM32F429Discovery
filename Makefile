@@ -13,8 +13,8 @@ SDK_NAME := arm-buildroot-uclinux-uclibcgnueabi_sdk-buildroot.tar.gz
 
 # === External customization paths ===
 BR2_EXTERNAL_DIR  := $(realpath firmware)
-DEFCONFIG_ALL     := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME)_defconfig
-DEFCONFIG_SDK     := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME)_sdk_defconfig
+DEFCONFIG_ALL     := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME).defconfig
+DEFCONFIG_SDK     := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME)_sdk.defconfig
 DEFCONFIG_LINUX   := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/linux.config
 DEFCONFIG_BUSYBOX := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/busybox.config
 FLASH_SCRIPT      := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/flash.sh
@@ -71,11 +71,11 @@ sdk: buildroot
 # -------------------------------------------------------------
 # Configuration targets
 # -------------------------------------------------------------
-.PHONY: configure configure_sdk
+.PHONY: configure sdk-configure
 configure: buildroot
 	@$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_ALL) defconfig
 
-configure_sdk: buildroot
+sdk-configure: buildroot
 	@$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_SDK) defconfig
 
 # -------------------------------------------------------------
@@ -97,11 +97,15 @@ flash:
 # -------------------------------------------------------------
 # Menuconfig and Save Config
 # -------------------------------------------------------------
-# To create or modify Buildroot configuration from scratch:
+# To create Buildroot configuration from scratch:
 # 1) Run `make buildroot` to clone Buildroot if not present
 # 2) Enter Buildroot directory: `cd buildroot`
-# 3) Run `make menuconfig` to open Buildroot configuration menu
-#    - Customize settings, enable packages, kernel options, etc.
+# 3) select initialize project for your board by using configuration form buildroot, in our example `make stm32f429_disco_defconfig`
+# 4) Return to project root directory: `cd ..`
+# 5) Run `make menuconfig` to open Buildroot configuration menu, configure SDK configuration. Save configuration on exit
+# 6) Run `make sdk-savedefconfig` to open Buildroot configuration menu, configure SDK configuration
+# 7) Run `make menuconfig` to open Buildroot configuration menu, configure Buildroot project settings:
+#    - Customize settings, enable packages, etc.
 #    - To enable external SDK integration:
 #        * In Buildroot menu, go to "Toolchain" → enable "External Toolchain"
 #        * Specify the path to your SDK if needed (e.g. /workspace/$(SDK_DIR)/$(SDK_NAME))
@@ -113,21 +117,23 @@ flash:
 #        * Go to "Target packages" → "BusyBox"
 #        * Enable "Use a custom BusyBox configuration file"
 #        * Set the path to your external BusyBox config file (e.g., $(DEFCONFIG_BUSYBOX))
-#        * Also track this config file in your repo for persistence
-#    - Save configuration before exiting menuconfig
-# 4) Exit the Buildroot directory: `cd ..`
-# 5) Run `make savedefconfig` to save the minimal defconfig file
-#    - This updates your main defconfig used by Buildroot
-#    - Commit this defconfig and external Linux/BusyBox configs to version control
+#        * remove busybox fragment files if any
+#    - Save configuration on exit
+# 8) Run `make savedefconfig` to save the minimal defconfig file
+# 9) Run `make linux-menuconfig`to open Linux configuration menu, customize settings. Save configuration on exit
+# 10) Run `make linux-savedefconfig` to save Linux defconfig file outside buildroot tree to be 
+# 11) Run `make busybox-menuconfig`to open BusyBox configuration menu, customize settings. Save configuration on exit
+# 12) Run `make busybox-savedefconfig` to save BusyBox defconfig file outside buildroot tree to be 
+# 13) Commit changes: and external Buildroot/Linux/BusyBox configs to version control
 
-.PHONY: menuconfig savedefconfig savedefconfig_sdk
+.PHONY: menuconfig savedefconfig sdk-savedefconfig
 menuconfig: buildroot
 	@$(MAKE_BR) BR2_EXTERNAL=$(BR2_EXTERNAL_DIR) menuconfig
 
 savedefconfig:
 	@$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_ALL) savedefconfig
 
-savedefconfig_sdk:
+sdk-savedefconfig:
 	@$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_SDK) savedefconfig
 
 # -------------------------------------------------------------
