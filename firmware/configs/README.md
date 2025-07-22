@@ -3,7 +3,9 @@
 This guide describes the process for configuring, building, and managing a Buildroot-based Linux system for the **STM32F429Discovery** board. The setup is divided into two stages to optimize build performance and support reproducible toolchain and system builds.
 
 ## Directory Structure
+
 > **Note**: The directories `buildroot-ccache/` and `buildroot-downloads/` are created automatically and used to optimize caching and downloads. These are gitignored by default.
+
 ```
 workspace/
 ├── buildroot/                 ← Buildroot source (submodule or cloned)
@@ -46,26 +48,45 @@ Generating the cross-compilation SDK as a standalone artifact is useful when:
 
 2. Create the default SDK configuration:
    ```bash
-   cd buildroot && make stm32f429_disco_defconfig && cd ..
+   cd buildroot && make stm32f429_disco_xip_defconfig && cd ..
    ```
 
 3. Open the Buildroot configuration menu:
    ```bash
    make menuconfig
    ```
-4. In the menu:
+4. In the configuration interface:
 
-   - Navigate to
+   - To use out of tree downloads folder:
+     ```bash
+     Build options  --->
+        (Download dir) → /workspace/buildroot-downloads
+     ```
+
+   - To use out of tree ccache folder:
+     ```bash
+     Build options  --->
+        [*] Enable compiler cache
+        (Compiler cache location) → /workspace/buildroot-ccache
+     ```
+
+   - To enable gcc size optimization:
+     ```bash
+     Build options  --->
+        gcc optimization level → optimize for size
+     ```
+
+   - To set GCC compiler Version:
      ```bash
      Toolchain  --->
-        [*] Build cross-compilation toolchain
-        [*] Enable toolchain SDK generation
+        (GCC compiler Version) → [*] gcc 13.x
      ```
-   - Adjust toolchain options as required
 
-        - C library: uClibc
-        - ABI: EABI
-        - Optional support for C++, threads, etc.
+   - To enable C++ support:
+     ```bash
+     Toolchain  --->
+        [*] Enable C++ support
+     ```
 
 5. Save the SDK configuration
    ```bash
@@ -76,12 +97,11 @@ Generating the cross-compilation SDK as a standalone artifact is useful when:
    ```bash
    make sdk
    ```
-   The SDK will be generated as: `buildroot-sdk/arm-buildroot-uclinux-uclibcgnueabi_sdk-buildroot.tar.gz`
 
+   The SDK will be generated as: `buildroot-sdk/arm-buildroot-uclinux-uclibcgnueabi_sdk-buildroot.tar.gz`
 
 ## Stage 2: Project Configuration
 The second stage configures and builds the full root filesystem and Linux image using the external SDK and tracked configuration files.
-
 
 ### Steps:
 
@@ -92,7 +112,7 @@ The second stage configures and builds the full root filesystem and Linux image 
 
 2. Create the default Buildroot project configuration:
    ```bash
-   cd buildroot && make stm32f429_disco_defconfig && cd ..
+   cd buildroot && make stm32f429_disco_xip_defconfig && cd ..
    ```
 
 3. Open the Buildroot configuration menu:

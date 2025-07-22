@@ -29,7 +29,7 @@ MAKE_BR  := $(MAKE) -C $(BUILDROOT_DIR)
 # Default target
 # -------------------------------------------------------------
 .PHONY: all
-all: sdk configure dtb-clean linux-dirclean build_all
+all: sdk dtb-clean linux-dirclean configure build_all
 
 # -------------------------------------------------------------
 # Buildroot setup
