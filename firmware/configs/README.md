@@ -119,6 +119,7 @@ The second stage configures and builds the full root filesystem and Linux image 
    ```bash
    make menuconfig
    ```
+
 4. In the configuration interface:
 
    - To use an external SDK:
@@ -146,6 +147,14 @@ The second stage configures and builds the full root filesystem and Linux image 
          (Configuration file path) →  /workspace/firmware/board/stm32f429disco/linux.config
      ```
 
+   - To enable a tracked out-of-tree Device Tree Source file:
+     ```bash
+     Kernel  --->
+         (Kernel version) → 6.1.27 
+         (In-tree Device Tree Source file names) → stm32f429-disco (leave as it is)
+         (Out-of-tree Device Tree Source file paths) →  /workspace/firmware/board/stm32f429disco/dts/stm32f429disco-custom.dts
+     ```
+
    - To enable a tracked BusyBox configuration:
      ```bash
      Target packages  --->
@@ -159,6 +168,7 @@ The second stage configures and builds the full root filesystem and Linux image 
         BusyBox  --->
             (Additional BusyBox configuration fragment files) → (empty)
      ```
+
 5. Exit configuration interface and save the Buildroot configuration
    ```bash
    make savedefconfig
