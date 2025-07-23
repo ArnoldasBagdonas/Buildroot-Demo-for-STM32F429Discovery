@@ -124,26 +124,41 @@ The second stage configures and builds the full root filesystem and Linux image 
    - To use an external SDK:
      ```bash
      Toolchain  --->
-        [*] Enable external toolchain
-        (Path to SDK) → /workspace/buildroot-sdk/arm-buildroot-uclinux-uclibcgnueabi_sdk-buildroot.tar.gz
+         Toolchain type → (X) External toolchain
+         Toolchain → (X) Custom toolchain
+         Toolchain origin → (X) Toolchain to be downloaded and installed
+         Toolchain URL → file:///workspace/buildroot-sdk/arm-buildroot-uclinux-uclibcgnueabi_sdk-buildroot.tar.gz
+         External toolchain gcc version → (X) 13.x
+         External toolchain kernel headers series → (X) 6.1.x
+         External toolchain C library → (X) uClibc/uClibc-ng
+         [*] Toolchain has threads support?
+            [] Toolchain has threads debugging support?
+            [] Toolchain has NPTL threads support?
+         [*] Toolchain has C++ support?
+
      ```
 
    - To enable a tracked Linux kernel configuration:
      ```bash
      Kernel  --->
-        [*] Use a custom kernel configuration file
-        (/workspace/firmware/board/stm32f429disco/linux.config)
+         (Kernel version) → 6.1.27 
+         Kernel configuration → [*] Use a custom kernel configuration file
+         (Configuration file path) →  /workspace/firmware/board/stm32f429disco/linux.config
      ```
 
    - To enable a tracked BusyBox configuration:
      ```bash
      Target packages  --->
         BusyBox  --->
-            [*] Use a custom BusyBox configuration file
-            (/workspace/firmware/board/stm32f429disco/busybox.config)
+            (BusyBox configuration file to use?) → /workspace/firmware/board/stm32f429disco/busybox.config
+            (Additional BusyBox configuration fragment files) → (empty)
      ```
    - Remove any existing BusyBox configuration fragments if present in the output tree.
-
+     ```bash
+     Target packages  --->
+        BusyBox  --->
+            (Additional BusyBox configuration fragment files) → (empty)
+     ```
 5. Exit configuration interface and save the Buildroot configuration
    ```bash
    make savedefconfig

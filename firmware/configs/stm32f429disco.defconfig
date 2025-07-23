@@ -8,11 +8,7 @@ BR2_TOOLCHAIN_EXTERNAL_HEADERS_6_1=y
 # BR2_TOOLCHAIN_EXTERNAL_HAS_THREADS_DEBUG is not set
 # BR2_TOOLCHAIN_EXTERNAL_HAS_THREADS_NPTL is not set
 BR2_TOOLCHAIN_EXTERNAL_CXX=y
-BR2_DL_DIR="/workspace/buildroot-downloads"
-BR2_OPTIMIZE_S=y
 BR2_ENABLE_LTO=y
-BR2_ROOTFS_OVERLAY="/workspace/firmware/board/stm32f429disco/rootfs-overlay"
-BR2_ROOTFS_PRE_BUILD_SCRIPT="/workspace/firmware/board/stm32f429disco/pre-build.sh"
 BR2_ROOTFS_POST_BUILD_SCRIPT="board/stmicroelectronics/common/stm32f4xx/stm32-post-build.sh"
 BR2_LINUX_KERNEL=y
 BR2_LINUX_KERNEL_CUSTOM_VERSION=y
@@ -23,7 +19,6 @@ BR2_LINUX_KERNEL_IMAGE_TARGET_CUSTOM=y
 BR2_LINUX_KERNEL_IMAGE_TARGET_NAME="xipImage"
 BR2_LINUX_KERNEL_DTS_SUPPORT=y
 BR2_LINUX_KERNEL_INTREE_DTS_NAME="stm32f429-disco"
-BR2_LINUX_KERNEL_CUSTOM_DTS_PATH="/workspace/firmware/board/stm32f429disco/dts/stm32f429disco-custom.dts"
 BR2_PACKAGE_BUSYBOX_CONFIG="/workspace/firmware/board/stm32f429disco/busybox.config"
 # BR2_PACKAGE_IFUPDOWN_SCRIPTS is not set
 BR2_TARGET_ROOTFS_INITRAMFS=y
