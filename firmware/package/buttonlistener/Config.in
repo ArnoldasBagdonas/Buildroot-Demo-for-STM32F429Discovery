@@ -1,0 +1,6 @@
+config BR2_PACKAGE_BUTTONLISTENER
+    bool "GPIO button listener example"
+    help
+      This is a simple application that listens for button press events
+      from gpio-keys via /dev/input/eventX, and can be used to trigger
+      actions such as toggling an LED using the /sys/class/leds interface.
