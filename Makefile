@@ -29,7 +29,7 @@ MAKE_BR  := $(MAKE) -C $(BUILDROOT_DIR)
 # Default target
 # -------------------------------------------------------------
 .PHONY: all
-all: sdk dtb-clean linux-dirclean configure build_all
+all: sdk dtb-clean rootfs-clean configure build_all
 
 # -------------------------------------------------------------
 # Buildroot setup
@@ -154,6 +154,7 @@ linux-savedefconfig:
 	@$(MAKE_BR) linux-savedefconfig
 	@cp $(BUILDROOT_DIR)/output/build/linux-*/defconfig $(DEFCONFIG_LINUX)
 	@$(ECHO) "Linux kernel config saved to: $(DEFCONFIG_LINUX)"
+	@$(MAKE_BR) linux-dirclean
 
 # -------------------------------------------------------------
 # BusyBox config targets
@@ -178,8 +179,11 @@ busybox-savedefconfig:
 # -------------------------------------------------------------
 # Root filesystem rebuild targets
 # -------------------------------------------------------------
-.PHONY: linux-dirclean linux-rebuild dtb-clean
-linux-dirclean: dtb-clean
+.PHONY: target-clean linux-dirclean linux-rebuild dtb-clean
+target-clean:
+	@$(MAKE_BR) target-clean
+
+linux-dirclean:
 	@$(MAKE_BR) linux-dirclean
 
 linux-rebuild: dtb-clean
@@ -190,8 +194,8 @@ dtb-clean:
 	@$(RM_F) $(BUILDROOT_DIR)/output/images/stm32f429-disco-custom.dtb
 	@$(ECHO) "   ✔ Custom device tree delete complete."
 
-.PHONY: reinstall-rootfs rebuild-rootfs
-reinstall-rootfs:
+.PHONY: rootfs-clean rootfs-rebuild
+rootfs-clean:
 	@$(ECHO) "==> Reinstalling root filesystem..."
 	@{ \
 		rm -rf $(BUILDROOT_DIR)/output/target && \
@@ -201,7 +205,7 @@ reinstall-rootfs:
 		$(ECHO) "   ✖ Failed to clean rootfs."; exit 1; \
 	}
 
-rebuild-rootfs: reinstall-rootfs
+rootfs-rebuild: rootfs-clean
 	@$(ECHO) "==> Rebuilding root filesystem only..."
 	@{ \
 		$(MAKE_BR) && \

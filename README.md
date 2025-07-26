@@ -199,8 +199,9 @@ Final image files are located under `output/images/`.
 |-----------------------|----------------------------------------------------|
 | `make clean`          | Removes all output files except downloaded sources |
 | `make distclean`      | Full clean including configs and downloads         |
-| `make clean-rootfs`   | Cleans `target/`                                   |
-| `make rebuild-rootfs` | Rebuilds root filesystem                           |
+| `make dtb-clean`      | Cleans device tree                                 |
+| `make rootfs-clean`   | Cleans `target/`                                   |
+| `make rootfs-rebuild` | Rebuilds root filesystem                           |
 | `make linux-rebuild`  | Rebuilds Linux kernel                              |
 | `make busybox-rebuild`| Rebuilds BusyBox                                   |
 | `make <pkg>-rebuild`  | Rebuilds a specified package                       |
