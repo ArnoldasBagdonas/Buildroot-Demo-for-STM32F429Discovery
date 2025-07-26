@@ -1,4 +1,0 @@
-config BR2_PACKAGE_LEDBRIGHTNESS
-    bool "ledbrightness /sys/class/leds example"
-    help
-      This is an LED control application with /sys/class/leds.
