@@ -1,7 +1,7 @@
 # Makefile for a mixed C project
 
 # Target executable name
-TARGET ?= ioexample1
+TARGET ?= ioexample2
 
 # Build configuration flags
 DEBUG_FLAGS    = -O0 -g -Wall

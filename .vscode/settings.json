@@ -6,5 +6,8 @@
     //Automatically convert line endings to LF every time you save a file
     "editor.codeActionsOnSave": {
             "source.fixAll": "always"
+    },
+    "files.associations": {
+        "led.h": "c"
     }
 }

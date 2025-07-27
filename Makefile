@@ -97,40 +97,12 @@ flash:
 # -------------------------------------------------------------
 # Menuconfig and Save Config
 # -------------------------------------------------------------
-# To create Buildroot configuration from scratch:
-# 1) Run `make buildroot` to clone Buildroot if not present
-# 2) Enter Buildroot directory: `cd buildroot`
-# 3) select initialize project for your board by using configuration form buildroot, in our example `make stm32f429_disco_defconfig`
-# 4) Return to project root directory: `cd ..`
-# 5) Run `make menuconfig` to open Buildroot configuration menu, configure SDK configuration. Save configuration on exit
-# 6) Run `make sdk-savedefconfig` to open Buildroot configuration menu, configure SDK configuration
-# 7) Run `make menuconfig` to open Buildroot configuration menu, configure Buildroot project settings:
-#    - Customize settings, enable packages, etc.
-#    - To enable external SDK integration:
-#        * In Buildroot menu, go to "Toolchain" → enable "External Toolchain"
-#        * Specify the path to your SDK if needed (e.g. /workspace/$(SDK_DIR)/$(SDK_NAME))
-#    - To use and track external Linux kernel config:
-#        * Go to "Kernel" → "Use a custom kernel configuration file"
-#        * Set the path to your external Linux config file (e.g., $(DEFCONFIG_LINUX))
-#        * Make sure this config file is tracked in your repo to keep changes persistent
-#    - To use and track external BusyBox config:
-#        * Go to "Target packages" → "BusyBox"
-#        * Enable "Use a custom BusyBox configuration file"
-#        * Set the path to your external BusyBox config file (e.g., $(DEFCONFIG_BUSYBOX))
-#        * remove busybox fragment files if any
-#    - Save configuration on exit
-# 8) Run `make savedefconfig` to save the minimal defconfig file
-# 9) Run `make linux-menuconfig`to open Linux configuration menu, customize settings. Save configuration on exit
-# 10) Run `make linux-savedefconfig` to save Linux defconfig file outside buildroot tree to be 
-# 11) Run `make busybox-menuconfig`to open BusyBox configuration menu, customize settings. Save configuration on exit
-# 12) Run `make busybox-savedefconfig` to save BusyBox defconfig file outside buildroot tree to be 
-# 13) Commit changes: and external Buildroot/Linux/BusyBox configs to version control
-
 .PHONY: menuconfig savedefconfig sdk-savedefconfig
 menuconfig: buildroot
 	@$(MAKE_BR) BR2_EXTERNAL=$(BR2_EXTERNAL_DIR) menuconfig
 
 savedefconfig:
+# After savedefconfig to rebuild a specified package run: make make <pkg>-rebuild
 	@$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_ALL) savedefconfig
 
 sdk-savedefconfig:
@@ -139,42 +111,50 @@ sdk-savedefconfig:
 # -------------------------------------------------------------
 # Linux Kernel config targets
 # -------------------------------------------------------------
-# 1) make linux-menuconfig
-# 2) make linux-savedefconfig
-# 3) make menuconfig
-# Kernel  --->
-#     [*] Use a custom kernel configuration
-#     (/workspace/firmware/board/$(BOARD_NAME)/linux.config)  Custom kernel config file path
 
 .PHONY: linux-menuconfig linux-savedefconfig
 linux-menuconfig:
 	@$(MAKE_BR) linux-menuconfig
 
 linux-savedefconfig:
+	@$(ECHO) "==> Saving Linux kernel config..."
 	@$(MAKE_BR) linux-savedefconfig
-	@cp $(BUILDROOT_DIR)/output/build/linux-*/defconfig $(DEFCONFIG_LINUX)
-	@$(ECHO) "Linux kernel config saved to: $(DEFCONFIG_LINUX)"
+	@set -e; \
+	LINUX_CONFIG_FILE=$$(find $(BUILDROOT_DIR)/output/build/ -type f -name 'defconfig' -path '*/linux-*/defconfig' | head -n1); \
+	if [ -z "$$LINUX_CONFIG_FILE" ]; then \
+		$(ECHO) "✖ ERROR: Could not locate saved Linux defconfig file." >&2; exit 1; \
+	else \
+		cp "$$LINUX_CONFIG_FILE" $(DEFCONFIG_LINUX); \
+		$(ECHO) "✔ Linux kernel config saved to: $(DEFCONFIG_LINUX)"; \
+	fi
+	@$(ECHO) "==> Cleaning Linux build directory..."
 	@$(MAKE_BR) linux-dirclean
+	@$(ECHO) "✔ Linux build directory cleaned."
 
 # -------------------------------------------------------------
 # BusyBox config targets
 # -------------------------------------------------------------
-# 1) make busybox-menuconfig
-# 2) make busybox-savedefconfig
-# 3) make menuconfig
-# Target packages  --->
-#     BusyBox  --->
-#         [*] Use a custom BusyBox configuration file
-#         (/workspace/firmware/board/$(BOARD_NAME)/busybox.config)
-
 .PHONY: busybox-menuconfig busybox-savedefconfig
 busybox-menuconfig:
 	@$(MAKE_BR) busybox-menuconfig
 
 busybox-savedefconfig:
-	@$(ECHO) "Saving BusyBox config..."
-	@cp $(BUILDROOT_DIR)/output/build/busybox-*/.config $(DEFCONFIG_BUSYBOX)
-	@$(ECHO) "BusyBox config saved to: $(DEFCONFIG_BUSYBOX)"
+	@$(ECHO) "==> Saving BusyBox config..."
+	@set -e; \
+	BUSYBOX_CONFIG_FILE=$$(find $(BUILDROOT_DIR)/output/build/ -type f -name '.config' -path '*/busybox-*/.config' | head -n1); \
+	if [ -z "$$BUSYBOX_CONFIG_FILE" ]; then \
+		echo "✖ ERROR: Could not locate BusyBox .config file." >&2; exit 1; \
+	else \
+		cp "$$BUSYBOX_CONFIG_FILE" $(DEFCONFIG_BUSYBOX); \
+		echo "✔ BusyBox config saved to: $(DEFCONFIG_BUSYBOX)"; \
+	fi
+	@$(ECHO) "==> Cleaning BusyBox build directory and stamps..."
+	@set -e; \
+	for dir in $(BUILDROOT_DIR)/output/build/busybox-*; do \
+		[ -d "$$dir" ] && rm -rf "$$dir"; \
+	done
+	@find $(BUILDROOT_DIR)/output/build/ -name '.stamp_busybox_*' -exec rm -f {} +
+	@$(ECHO) "✔ BusyBox clean complete."
 
 # -------------------------------------------------------------
 # Root filesystem rebuild targets
@@ -196,13 +176,13 @@ dtb-clean:
 
 .PHONY: rootfs-clean rootfs-rebuild
 rootfs-clean:
-	@$(ECHO) "==> Reinstalling root filesystem..."
+	@$(ECHO) "==> Deleting root filesystem..."
 	@{ \
-		rm -rf $(BUILDROOT_DIR)/output/target && \
-		find $(BUILDROOT_DIR)/output/build/ -name '.stamp_target_installed' -delete && \
-		$(ECHO) "   ✔ Cleaned output/target and .stamp_target_installed files"; \
+		[ -d "$(BUILDROOT_DIR)/output/target" ] && rm -rf "$(BUILDROOT_DIR)/output/target" || true; \
+		[ -d "$(BUILDROOT_DIR)/output/build" ] && find "$(BUILDROOT_DIR)/output/build" -name '.stamp_target_installed' -delete || true; \
+		$(ECHO) "   ✔ Deleted output/target and .stamp_target_installed files"; \
 	} || { \
-		$(ECHO) "   ✖ Failed to clean rootfs."; exit 1; \
+		$(ECHO) "   ✖ Failed to delete rootfs."; exit 1; \
 	}
 
 rootfs-rebuild: rootfs-clean
@@ -215,8 +195,26 @@ rootfs-rebuild: rootfs-clean
 	}
 
 # -------------------------------------------------------------
+# Custom target: Always rebuild ioexample1
+# -------------------------------------------------------------
+.PHONY: ioexample1-rebuild
+ioexample1-rebuild:
+	@echo "⚠ Forcing rebuild of ioexample1"
+	$(MAKE_BR) ioexample1-dirclean
+	$(MAKE_BR) ioexample1
+
+# -------------------------------------------------------------
+# Custom target: Always rebuild ioexample2
+# -------------------------------------------------------------
+.PHONY: ioexample2-rebuild
+ioexample2-rebuild:
+	@echo "⚠ Forcing rebuild of ioexample2"
+	$(MAKE_BR) ioexample2-dirclean
+	$(MAKE_BR) ioexample2
+
+# -------------------------------------------------------------
 # Catch-all: forward unknown targets to Buildroot
 # -------------------------------------------------------------
 %:
-	@$(ECHO) "Forwarding target '$@' to Buildroot..."
+	@$(ECHO) "⚠ Forwarding target '$@' to Buildroot..."
 	@$(MAKE_BR) $@

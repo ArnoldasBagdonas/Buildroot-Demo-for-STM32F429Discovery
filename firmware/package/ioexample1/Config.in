@@ -1,5 +1,5 @@
 config BR2_PACKAGE_IOEXAMPLE1
-    bool "Example: LED control with c-periphery"
+    bool "Example1: LED control with c-periphery"
     help
       This package provides an example C application that demonstrates
       controlling an LED named "led-red" using the c-periphery library.
