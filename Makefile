@@ -115,21 +115,12 @@ sdk-savedefconfig:
 .PHONY: linux-menuconfig linux-savedefconfig
 linux-menuconfig:
 	@$(MAKE_BR) linux-menuconfig
-
+	
 linux-savedefconfig:
 	@$(ECHO) "==> Saving Linux kernel config..."
 	@$(MAKE_BR) linux-savedefconfig
-	@set -e; \
-	LINUX_CONFIG_FILE=$$(find $(BUILDROOT_DIR)/output/build/ -type f -name 'defconfig' -path '*/linux-*/defconfig' | head -n1); \
-	if [ -z "$$LINUX_CONFIG_FILE" ]; then \
-		$(ECHO) "✖ ERROR: Could not locate saved Linux defconfig file." >&2; exit 1; \
-	else \
-		cp "$$LINUX_CONFIG_FILE" $(DEFCONFIG_LINUX); \
-		$(ECHO) "✔ Linux kernel config saved to: $(DEFCONFIG_LINUX)"; \
-	fi
-	@$(ECHO) "==> Cleaning Linux build directory..."
-	@$(MAKE_BR) linux-dirclean
-	@$(ECHO) "✔ Linux build directory cleaned."
+	@cp $(BUILDROOT_DIR)/output/build/linux-*/defconfig $(DEFCONFIG_LINUX)
+	$(ECHO) "✔ Linux kernel config saved to: $(DEFCONFIG_LINUX)"
 
 # -------------------------------------------------------------
 # BusyBox config targets
@@ -148,13 +139,6 @@ busybox-savedefconfig:
 		cp "$$BUSYBOX_CONFIG_FILE" $(DEFCONFIG_BUSYBOX); \
 		echo "✔ BusyBox config saved to: $(DEFCONFIG_BUSYBOX)"; \
 	fi
-	@$(ECHO) "==> Cleaning BusyBox build directory and stamps..."
-	@set -e; \
-	for dir in $(BUILDROOT_DIR)/output/build/busybox-*; do \
-		[ -d "$$dir" ] && rm -rf "$$dir"; \
-	done
-	@find $(BUILDROOT_DIR)/output/build/ -name '.stamp_busybox_*' -exec rm -f {} +
-	@$(ECHO) "✔ BusyBox clean complete."
 
 # -------------------------------------------------------------
 # Root filesystem rebuild targets

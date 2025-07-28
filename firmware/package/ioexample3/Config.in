@@ -1,0 +1,14 @@
+config BR2_PACKAGE_IOEXAMPLE3
+    bool "Example3: I2C Bus Scanner using c-periphery"
+    help
+      This package provides a C application example using the c-periphery
+      library to demonstrate scanning the I2C bus for connected devices.
+
+      The program opens a specified I2C bus (e.g., /dev/i2c-2) and attempts
+      zero-length transfers to all valid 7-bit I2C addresses (0x03 to 0x77),
+      printing detected device addresses to stdout.
+
+      This is useful for debugging or discovering devices on the I2C bus.
+
+      This example uses:
+        https://github.com/vsergeev/c-periphery
