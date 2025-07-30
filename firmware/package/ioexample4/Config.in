@@ -1,0 +1,16 @@
+config BR2_PACKAGE_IOEXAMPLE4
+    bool "Example4: SPI Temperature Read from I3G4250D using c-periphery"
+    help
+      This package provides a C application example using the c-periphery
+      library to demonstrate reading the temperature register from the
+      ST I3G4250D gyroscope over SPI.
+
+      The program opens the specified SPI device (e.g., /dev/spidev5.0),
+      enables the sensor by writing to CTRL_REG1, then reads the OUT_TEMP
+      register (0x26) and prints the raw and signed temperature value to stdout.
+
+      The chip select (CS) line is configured via Device Tree using cs-gpios
+      and is automatically handled by the Linux SPI driver.
+
+      This example uses:
+        https://github.com/vsergeev/c-periphery
