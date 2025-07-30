@@ -23,7 +23,7 @@ OBJ := $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRC))
 # Compiler settings
 CC      ?= gcc
 CFLAGS  ?= $(MINISIZE_FLAGS)
-LDFLAGS ?= $(CFLAGS) -lperiphery
+LDFLAGS ?= $(CFLAGS)
 
 # Default target
 all: $(BIN_DIR)/$(TARGET) copy-config
