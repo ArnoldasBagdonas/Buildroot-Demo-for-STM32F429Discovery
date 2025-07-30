@@ -1,0 +1,12 @@
+config BR2_PACKAGE_IOEXAMPLE5
+    bool "Example5: RCC Frequency Reader"
+    help
+      This package provides a simple utility that reads the STM32F4 RCC
+      (Reset and Clock Control) registers directly from `/dev/mem` to
+      detect and display the current system clock (SYSCLK) frequency.
+      
+      It demonstrates low-level hardware register mapping and direct
+      memory access on STM32 microcontrollers running Linux.
+
+      This example uses:
+        https://github.com/vsergeev/c-periphery
