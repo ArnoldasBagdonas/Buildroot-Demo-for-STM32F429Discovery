@@ -8,6 +8,8 @@
             "source.fixAll": "always"
     },
     "files.associations": {
-        "led.h": "c"
+        "*.h": "c",
+        "*.c": "c",
+        "*.cpp": "cpp",
     }
 }
