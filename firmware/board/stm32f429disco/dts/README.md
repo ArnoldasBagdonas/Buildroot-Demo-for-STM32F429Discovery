@@ -1,6 +1,33 @@
 # STM32F429Discovery DTS and Peripheral Configuration Guide
 
-This document provides guidelines for configuring Device Tree Source (DTS) files and Linux kernel settings for **I2C** and **SPI** interfaces on the **STM32F429Discovery** board. It also includes a troubleshooting checklist to analyze device initialization, driver bindings, and runtime issues. 
+This document provides guidelines for configuring **Device Tree Source (DTS)** files and Linux kernel settings for **I2C**, **SPI**, and **PWM** interfaces on the **STM32F429Discovery** board. It also includes a troubleshooting checklist to analyze device initialization, driver bindings, and runtime issues.
+
+## Board Overview
+
+The **STM32F429I-DISC1** board is equipped with:
+
+ST-LINK/V2-B embedded debugger/programmer
+
+- 2.4" QVGA TFT LCD
+- External 64-Mbit SDRAM
+- ST MEMS gyroscope
+- USB OTG micro-AB connector
+- Onboard LEDs and push-buttons
+
+![STM32F429I-DISC1 board](../../../../docs/DISCO_F429ZI.jpg.250x250_q85.jpg)
+
+### Pinout Legend
+
+![STM32F429I-DISC1 board](../../../../docs/pinout_legend_2017-06-28-2.png)
+
+![STM32F429I-DISC1 board](../../../../docs/disco_f429zi_2017-07-25_slide1.png)
+
+![STM32F429I-DISC1 board](../../../../docs/disco_f429zi_2017-07-25_slide2.png)
+
+![STM32F429I-DISC1 board](../../../../docs/disco_f429zi_2017-07-25_slide3.png)
+
+References: [mbed: Boards » DISCO-F429ZI](https://os.mbed.com/platforms/ST-Discovery-F429ZI/)
+
 
 ## Directory Structure
 
@@ -19,6 +46,18 @@ firmware/
 │   └── rootfs-overlay/             ← Root filesystem overlay
 └── ...
 ```
+
+## Modifying Linux Device-Tree in Buildroot
+
+After the Modification is done, we have to tell the Buildroot to re-compile the Linux Kernel  
+In the Buildroot directory run following command: 
+$ make linux-rebuild 
+Now we are ready to re-generate the full system image after rebuilding the kernel: 
+$ make 
+
+
+
+Reference: https://microchip.my.site.com/s/article/Modifying-Linux-Device-Tree-in-Buildroot
 
 ## Configuring I2C
 
@@ -149,6 +188,66 @@ Device Drivers  --->
 ```
 
 With these options enabled, SPI devices automatically bind to the `"st,l3gd20-gyro"` kernel driver when available. Otherwise, `/dev/spidev*` is provided for testing or debugging.
+
+## Configuring PWM
+
+### Device Tree (stm32f429disco-custom.dts)
+
+```
+&pwm3_pins {
+    pins {
+        pinmux = <STM32_PINMUX('B', 4, AF2)>; /* Keep only TIM3_CH1 (PB4) */
+    };
+};
+
+&timers3 {
+    status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pwm3_pins>;
+    pwm {
+        status = "okay";
+    };
+};
+```
+
+### Kernel Configuration (linux.config)
+
+CONFIG_PWM=y
+CONFIG_PWM_STM32=y
+CONFIG_SYSFS=y
+CONFIG_PWM_SYSFS=y   # Often selected automatically with CONFIG_PWM
+
+
+### Test Manually via Sysfs
+
+On boot, check:
+```
+ls /sys/class/pwm
+```
+
+You should see pwmchipX.
+
+
+Test PWM:
+
+```
+cd /sys/class/pwm/pwmchip0
+
+# Export TIM3_CH1 (index 0)
+echo 0 > export
+echo 1000000 > pwm0/period       # Set period to 1,000,000 ns (1 ms)
+echo 250000  > pwm0/duty_cycle   # 25% duty
+echo 1 > pwm0/enable             # Enable
+
+# Wait or observe output here...
+
+# Disable PWM channels when done
+echo 0 > pwm0/enable
+
+# Unexport PWM channels
+echo 0 > unexport
+```
+
 
 ## Troubleshooting Checklist
 
