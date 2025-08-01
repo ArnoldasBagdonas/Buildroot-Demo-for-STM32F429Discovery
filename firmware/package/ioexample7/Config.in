@@ -1,0 +1,18 @@
+config BR2_PACKAGE_IOEXAMPLE7
+    bool "Example6: Serial Interactive Demo (UART communication)"
+    help
+      This package provides a simple utility demonstrating the usage of
+      the Linux serial interface on an STM32F4-based board.
+
+      It opens a specified serial port (default: /dev/ttySTM1) configured
+      for 115200 8N1, no flow control, and allows interactive user input
+      from the terminal.
+
+      The example shows:
+        - Opening and configuring a serial port
+        - Sending messages typed by the user
+        - Handling empty input to exit gracefully
+        - Basic interaction for testing UART communication
+
+      Dependencies:
+        https://github.com/vsergeev/c-periphery

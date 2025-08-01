@@ -248,6 +248,110 @@ echo 0 > pwm0/enable
 echo 0 > unexport
 ```
 
+## Configuring SERIAL
+
+### Device Tree (stm32f429disco-custom.dts)
+
+If Device Tree (DTS) file does not provide an alias for new `usart3`, then STM32 USART driver cannot assign it a valid ID (ttySTM1, ttySTM2, etc.). 
+Modify the aliases node like this (add `&usart3` alias `serial1`):
+
+```
+. . .
+	aliases {
+		serial0 = &usart1;
+		serial1 = &usart3;
+	};
+. . .
+```
+
+Ensure USART3 is fully configured:
+
+```
+&usart3 {
+	pinctrl-0 = <&usart3_pins_a>;
+	pinctrl-names = "default";
+	status = "okay";
+
+    /* Enable RS485 and DE GPIO control*/
+    linux,rs485-enabled-at-boot-time;
+	rs485-rts-gpios = <&gpioe 15 GPIO_ACTIVE_HIGH>; /* DE/RE pin => PE15*/
+    rs485-rts-active-high;
+    rs485-rts-delay = <1 1>;   /* [TX-Delay RX-Delay] in milliseconds */
+};
+```
+
+- Double-check that usart3_pins_a is properly defined in your included pinctrl file (stm32f429-pinctrl.dtsi) and maps to the correct pins.
+
+- RS485 support with direction control (DE/RE pin) can be implemented via the device tree by specifying:
+
+	- RS485 mode activation
+	- GPIO for direction control (DE pin)
+	- Delay settings (optional)
+
+
+### Kernel Configuration (linux.config)
+
+Usually settings already availabe due to Linux console port configuration.
+
+### Test Manually via Sysfs
+
+On boot, check:
+```
+ls /sys/
+```
+
+You should see `ttySTM0` (serial console), and new `ttySTM1` (`usart3`).
+
+
+Test UART:
+
+```
+stty -F /dev/ttySTM1 115200 cs8 -cstopb -parenb -ixon -ixoff -crtscts raw
+echo "Hello RS485" > /dev/ttySTM1
+```
+Explanation of stty options:
+- `-F /dev/ttySTM1` : UART device (with RS485 transceiver attached)
+- `115200` : Baud rate
+` 'cs8`: 8 data bits
+- `-cstopb` : 1 stop bit (`cstopb` for 2 stop bits)
+- `-parenb` : No parity (`parenb` enables parity)
+- `-ixon` `-ixoff` : Disable software flow control (XON/XOFF)
+- `-crtscts` : Disable hardware RTS/CTS flow control
+- `raw` : Raw mode (no special character processing)
+
+Parity and Stop Bits quick reference:
+
+| Option    | Meaning                                 |
+|-----------|-----------------------------------------|
+| `parenb`  | Enable parity                           |
+| `-parenb` | Disable parity                          |
+| `parodd`  | Odd parity                              |
+| `-parodd` | Even parity (default if parity enabled) |
+| `cstopb`  | 2 stop bits                             |
+| `-cstopb` | 1 stop bit                              |
+
+If your driver supports RS485 mode, configure TX and RX delay times via Device Tree or configure RS485 parameters dynamically:
+
+```c
+#include <linux/serial.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <string.h>
+
+int fd = open("/dev/ttySTM1", O_RDWR);
+
+struct serial_rs485 rs485conf;
+memset(&rs485conf, 0, sizeof(rs485conf));
+
+rs485conf.flags |= SER_RS485_ENABLED;
+rs485conf.flags |= SER_RS485_RTS_ON_SEND;   // RTS high during TX
+rs485conf.flags &= ~(SER_RS485_RTS_AFTER_SEND); // RTS low after TX
+
+rs485conf.delay_rts_before_send = 2;   // 2 ms
+rs485conf.delay_rts_after_send  = 2;   // 2 ms
+
+ioctl(fd, TIOCSRS485, &rs485conf);
+```
 
 ## Troubleshooting Checklist
 

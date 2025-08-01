@@ -23,6 +23,7 @@
 
 	aliases {
 		serial0 = &usart1;
+		serial1 = &usart3;
 	};
 
 	leds {
@@ -206,4 +207,22 @@
     pwm {
         status = "okay";
     };
+};
+
+&usart3 {
+    pinctrl-0 = <&usart3_pins_a>;
+    pinctrl-names = "default";
+    status = "okay";
+
+    /* Enable RS485 */
+    linux,rs485-enabled-at-boot-time;
+
+    /* GPIO pin for RS485 DE (Driver Enable) */
+    rs485-rts-gpios = <&gpiob 13 GPIO_ACTIVE_HIGH>;
+
+    /* Active high means DE=1 enables TX */
+    rs485-rts-active-high;
+
+    /* Delay between RTS and TX start/stop (in milliseconds) */
+    rs485-rts-delay = <10 10>; /* TX-Delay RX-Delay */
 };
