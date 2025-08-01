@@ -143,20 +143,23 @@ busybox-savedefconfig:
 # -------------------------------------------------------------
 # Root filesystem rebuild targets
 # -------------------------------------------------------------
-.PHONY: target-clean linux-dirclean linux-rebuild dtb-clean
+.PHONY: target-clean linux-dirclean linux-rebuild dtb-clean dtb-rebuild
 target-clean:
 	@$(MAKE_BR) target-clean
 
 linux-dirclean:
 	@$(MAKE_BR) linux-dirclean
 
-linux-rebuild: dtb-clean
+linux-rebuild:
 	@$(MAKE_BR) linux-rebuild
 
 dtb-clean:
 	@$(ECHO) "==> Deleting custom device tree..."
 	@$(RM_F) $(BUILDROOT_DIR)/output/images/stm32f429-disco-custom.dtb
 	@$(ECHO) "   ✔ Custom device tree delete complete."
+
+dtb-rebuild: dtb-clean linux-rebuild build_all
+
 
 .PHONY: rootfs-clean rootfs-rebuild
 rootfs-clean:
