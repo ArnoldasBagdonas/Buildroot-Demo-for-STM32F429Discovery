@@ -1,0 +1,18 @@
+config BR2_PACKAGE_IOEXAMPLE6
+    bool "Example6: PWM Interactive Demo (TIM3_CH1, PB4)"
+    help
+      This package provides a simple utility demonstrating the usage of
+      the Linux PWM sysfs interface on an STM32F4-based board.
+
+      It enables PWM output on chip0, channel10 (TIM3_CH1, PB4) and interactively
+      adjusts the duty cycle in steps (25%, 50%, 75%, 100%) while waiting
+      for user input between changes.
+
+      The example shows:
+        - Opening and configuring a PWM channel
+        - Setting frequency and duty cycle
+        - Enabling/disabling PWM output
+        - Basic user interaction for testing LED brightness or signal levels
+
+      Dependencies:
+        https://github.com/vsergeev/c-periphery

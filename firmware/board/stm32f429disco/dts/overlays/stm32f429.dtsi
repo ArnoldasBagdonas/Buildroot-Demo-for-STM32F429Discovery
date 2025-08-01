@@ -45,6 +45,8 @@
  *     OTHER DEALINGS IN THE SOFTWARE.
  */
 
+//file stm32f429.dtsi
+
 #include "armv7-m.dtsi"
 #include <dt-bindings/clock/stm32fx-clock.h>
 #include <dt-bindings/mfd/stm32f4-rcc.h>

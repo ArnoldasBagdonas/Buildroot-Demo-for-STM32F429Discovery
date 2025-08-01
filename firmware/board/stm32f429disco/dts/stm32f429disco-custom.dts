@@ -191,3 +191,19 @@
 &gpioa {
     status = "okay";
 };
+
+/* --- PWM Configuration --- */
+&pwm3_pins {
+    pins {
+        pinmux = <STM32_PINMUX('B', 4, AF2)>; /* Keep only TIM3_CH1 (PB4) */
+    };
+};
+
+&timers3 {
+    status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pwm3_pins>;
+    pwm {
+        status = "okay";
+    };
+};

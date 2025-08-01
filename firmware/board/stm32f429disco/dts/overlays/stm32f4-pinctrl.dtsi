@@ -40,6 +40,8 @@
  *     OTHER DEALINGS IN THE SOFTWARE.
  */
 
+// file: stm32f4-pinctrl.dtsi
+
 #include <dt-bindings/pinctrl/stm32-pinfunc.h>
 #include <dt-bindings/mfd/stm32f4-rcc.h>
 
