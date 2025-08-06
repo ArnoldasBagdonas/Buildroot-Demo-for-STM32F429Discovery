@@ -1,0 +1,67 @@
+config BR2_PACKAGE_SLEEPEXAMPLE
+    bool "Sleep Functions Test Utility"
+    help
+      This package provides a simple C utility demonstrating and testing
+      various Linux sleep functions on an STM32-based system.
+
+      The utility performs interactive, serial console-friendly tests of:
+        - sleep(seconds)
+        - usleep(microseconds)
+        - nanosleep(timespec)
+        - clock_nanosleep(clockid_t, flags, timespec)
+
+      For each test, it prints the system date/time before and after the
+      sleep interval, allowing verification of proper timer and tick
+      operation on the device.
+
+      This is useful for diagnosing kernel timer issues where sleep calls
+      return immediately due to missing or broken clocksource drivers.
+
+      Dependencies:
+
+      **Standard C library (libc)**
+
+      **Core timekeeping (mandatory for all sleep functions):**
+        - CONFIG_HIGH_RES_TIMERS=y         # High-resolution timers for sub-second sleeps
+        - CONFIG_POSIX_TIMERS=y            # Required for nanosleep() and clock_nanosleep()
+        - CONFIG_GENERIC_CLOCKEVENTS=y     # Basic timer interrupt handling
+        - CONFIG_TICK_ONESHOT=y            # Allows precise one-shot timers
+        - CONFIG_HZ=1000                   # Recommended for millisecond accuracy
+        - CONFIG_CLKSRC_STM32=y            # STM32 clocksource driver
+
+      **Required for specific tests**
+        - CONFIG_TIMERFD=y                 # Needed for timerfd_create() test
+        - CONFIG_EPOLL=y                   # Needed for epoll_wait() test
+        - CONFIG_EVENTFD=y                 # Required by epoll for some event handling cases
+        - CONFIG_SIGNALFD=y                # Not strictly needed for your current code, but 
+                                           # part of epoll ecosystem
+        - CONFIG_FUTEX=y                   # Required by pthread_cond_timedwait() test (POSIX
+                                           # thread waits depend on futexes)
+
+      **Real-Time Clock (RTC), hardware clock device**
+        - CONFIG_RTC_CLASS=y               # Enable RTC subsystem support in the Linux kernel
+        - CONFIG_RTC_DRV_STM32=y           # Use the STM32-specific hardware RTC driver
+        - CONFIG_RTC_HCTOSYS=y             # At boot, set system time from hardware RTC
+        - CONFIG_RTC_SYSTOHC=y             # Periodically or on shutdown, write system time back to RTC
+        - CONFIG_RTC_HCTOSYS_DEVICE="rtc0" # Which hardware RTC device should be used to initialize
+                                           # the system clock at boot when CONFIG_RTC_HCTOSYS=y is enabled
+      
+      **Optional but recommended:**
+        - CONFIG_SYSFS=y                   # Enables /sys virtual filesystem exposing device
+                                           # and kernel info. Useful for monitoring hardware
+                                           # and kernel state.
+        - CONFIG_PROC_FS=y                 # Enables the /proc virtual filesystem. Many utilities
+                                           # rely on /proc for system info. Recommended to keep
+                                           # enabled for general system observability.
+        - NO_HZ_IDLE=n                     # (tickless idle) disables periodic ticks when system
+                                           # is idle, saving power. For real-time precision in
+                                           # sleep and timers, it is recommended to keep
+                                           # NO_HZ_IDLE disabled (set to 'n').
+
+      Timers in embedded Linux?
+
+       - https://www.reddit.com/r/embedded/comments/ya5tiq/timers_in_embedded_linux/
+         Look at the timerfd family functions https://linux.die.net/man/2/timerfd_create
+         The advantage of these compared to other types of timer is that you get a file
+         descriptor for the timer that you can then use with poll/select alone with other
+         fds. That makes it easy to have a single event loop that handle everything.

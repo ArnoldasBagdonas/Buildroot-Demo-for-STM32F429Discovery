@@ -13,6 +13,7 @@
 
 	chosen {
 		bootargs = "root=/dev/ram";
+		//bootargs = "root=/dev/ram clocksource=arm_system_timer";
 		stdout-path = "serial0:115200n8";
 	};
 
