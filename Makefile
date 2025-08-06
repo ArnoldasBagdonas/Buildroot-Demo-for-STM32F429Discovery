@@ -17,7 +17,7 @@ DEFCONFIG_ALL       := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME).defconfig
 DEFCONFIG_SDK       := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME)_sdk.defconfig
 DEFCONFIG_LINUX     := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/linux.config
 DEFCONFIG_BUSYBOX   := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/busybox.config
-DEFCONFIG_UCLIBC    := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/uclibc.config
+DEFCONFIG_UCLIBC    := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/uClibc-ng.config
 FLASH_SCRIPT        := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/flash.sh
 
 # === Helpers ===
