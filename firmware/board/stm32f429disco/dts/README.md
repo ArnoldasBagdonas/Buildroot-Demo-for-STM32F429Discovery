@@ -191,6 +191,9 @@ With these options enabled, SPI devices automatically bind to the `"st,l3gd20-gy
 
 ## Configuring PWM
 
+References:
+https://bootlin.com/blog/timer-counters-linux-microchip/
+
 ### Device Tree (stm32f429disco-custom.dts)
 
 ```
@@ -560,6 +563,10 @@ serial@40005000
 | Wrong device bound to driver   | Wrong or missing `compatible` string                         | Use correct chip name or fallback `spidev`  |
 | I2C bus exists but no device   | Pull-ups missing or wrong address in DTS                     | Fix hardware, correct `reg` value           |
 
+## References
+
+https://www.kernel.org/doc/Documentation/devicetree/bindings/mfd/
+https://bootlin.com/docs/
 
 ## License
 
