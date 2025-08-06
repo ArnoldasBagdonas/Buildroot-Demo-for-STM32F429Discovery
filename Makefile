@@ -12,12 +12,13 @@ SDK_DIR  := buildroot-sdk
 SDK_NAME := arm-buildroot-uclinux-uclibcgnueabi_sdk-buildroot.tar.gz
 
 # === External customization paths ===
-BR2_EXTERNAL_DIR  := $(realpath firmware)
-DEFCONFIG_ALL     := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME).defconfig
-DEFCONFIG_SDK     := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME)_sdk.defconfig
-DEFCONFIG_LINUX   := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/linux.config
-DEFCONFIG_BUSYBOX := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/busybox.config
-FLASH_SCRIPT      := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/flash.sh
+BR2_EXTERNAL_DIR    := $(realpath firmware)
+DEFCONFIG_ALL       := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME).defconfig
+DEFCONFIG_SDK       := $(BR2_EXTERNAL_DIR)/configs/$(BOARD_NAME)_sdk.defconfig
+DEFCONFIG_LINUX     := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/linux.config
+DEFCONFIG_BUSYBOX   := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/busybox.config
+DEFCONFIG_UCLIBC    := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/uclibc.config
+FLASH_SCRIPT        := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/flash.sh
 
 # === Helpers ===
 MKDIR_P  := mkdir -p
@@ -107,6 +108,19 @@ savedefconfig:
 
 sdk-savedefconfig:
 	@$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_SDK) savedefconfig
+
+# -------------------------------------------------------------
+# uclibc config targets
+# -------------------------------------------------------------
+
+.PHONY: uclibc-menuconfig uclibc-savedefconfig
+uclibc-menuconfig:
+	@$(MAKE_BR) uclibc-menuconfig
+	
+uclibc-savedefconfig:
+	@$(ECHO) "==> Saving uclibc config..."
+	@cp $(BUILDROOT_DIR)/output/build/uclibc-*/.config $(DEFCONFIG_UCLIBC)
+	$(ECHO) "✔ uclibc config saved to: $(DEFCONFIG_UCLIBC)"
 
 # -------------------------------------------------------------
 # Linux Kernel config targets
