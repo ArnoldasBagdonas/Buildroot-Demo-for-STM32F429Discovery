@@ -114,7 +114,9 @@ sdk-savedefconfig:
 # -------------------------------------------------------------
 
 .PHONY: uclibc-menuconfig uclibc-savedefconfig
-uclibc-menuconfig:
+uclibc-menuconfig: buildroot
+	@$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_SDK) defconfig
+	@$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_SDK) toolchain
 	@$(MAKE_BR) uclibc-menuconfig
 	
 uclibc-savedefconfig:
