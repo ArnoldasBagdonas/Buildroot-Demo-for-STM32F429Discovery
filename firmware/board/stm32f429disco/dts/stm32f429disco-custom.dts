@@ -29,13 +29,14 @@
 
 	leds {
 		compatible = "gpio-leds";
-		/*led-red {*/
-		/*	gpios = <&gpiog 14 0>;*/
-		/*};*/
-		led-green {
-			gpios = <&gpiog 13 0>;
+		led-red {
+			gpios = <&gpiog 14 0>;
 			linux,default-trigger = "heartbeat";
 		};
+		// led-green {
+		//	gpios = <&gpiog 13 0>;
+		//	/* linux,default-trigger = "heartbeat"; */
+		// };
 	};
 
 	gpio-keys {
@@ -212,6 +213,13 @@
 
 &usart3 {
     pinctrl-0 = <&usart3_pins_a>;
-    pinctrl-names = "default";
-    status = "okay";
+	pinctrl-names = "default";
+	status = "okay";
+
+	/* Enable RS485 and DE GPIO control*/
+	linux,rs485-enabled-at-boot-time;
+	rts-gpios = <&gpiod 12 GPIO_ACTIVE_HIGH>;
+	rs485-rts-active-high;
+	rs485-rts-delay = <10 10>; /* max 100 ms delay before sending, max 100 ms after sending */
 };
+

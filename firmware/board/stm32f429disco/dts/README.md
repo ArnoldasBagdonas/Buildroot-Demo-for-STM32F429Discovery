@@ -253,6 +253,12 @@ echo 0 > unexport
 
 ## Configuring SERIAL
 
+References:
+- https://www.kernel.org/doc/Documentation/devicetree/bindings/serial/serial.txt
+- https://www.kernel.org/doc/Documentation/devicetree/bindings/serial/st%2Cstm32-usart.txt
+- https://www.kernel.org/doc/Documentation/devicetree/bindings/serial/rs485.yaml
+- https://www.kernel.org/doc/Documentation/driver-api/serial/serial-rs485.rst
+
 ### Device Tree (stm32f429disco-custom.dts)
 
 If Device Tree (DTS) file does not provide an alias for new `usart3`, then STM32 USART driver cannot assign it a valid ID (ttySTM1, ttySTM2, etc.). 
@@ -271,42 +277,97 @@ Ensure USART3 is fully configured:
 
 ```
 &usart3 {
-	pinctrl-0 = <&usart3_pins_a>;
-	pinctrl-names = "default";
+    pinctrl-names = "default";
+    pinctrl-0 = <&usart3_pins_a>;
 	status = "okay";
 
-    /* Enable RS485 and DE GPIO control*/
-    linux,rs485-enabled-at-boot-time;
-	rs485-rts-gpios = <&gpioe 15 GPIO_ACTIVE_HIGH>; /* DE/RE pin => PE15*/
-    rs485-rts-active-high;
-    rs485-rts-delay = <1 1>;   /* [TX-Delay RX-Delay] in milliseconds */
+	/* Enable RS485 and DE GPIO control*/
+	linux,rs485-enabled-at-boot-time;
+	rts-gpios = <&gpiod 12 GPIO_ACTIVE_HIGH>;
+	rs485-rts-active-high;
+	rs485-rts-delay = <1 1>; /* max 100 ms delay before sending, max 100 ms after sending */
 };
 ```
 
-- Double-check that usart3_pins_a is properly defined in your included pinctrl file (stm32f429-pinctrl.dtsi) and maps to the correct pins.
+or if RTS/CTS hardware flow control is used configure:
 
-- RS485 support with direction control (DE/RE pin) can be implemented via the device tree by specifying:
+```
+&usart3 {
+    pinctrl-names = "default";
+    pinctrl-0 = <&usart3_pins_a>;
+	status = "okay";
 
-	- RS485 mode activation
-	- GPIO for direction control (DE pin)
-	- Delay settings (optional)
+	/* UART has dedicated lines for RTS/CTS hardware flow control */
+	/* enabled by pinmux configuration                            */
+	uart-has-rtscts;
+};
 
+/* Override usart3_pins_a */
+&pinctrl {
+    usart3_pins_a: usart3-0 {
+        pins1 {
+            pinmux = <STM32_PINMUX('B', 10, AF7)>, // USART3_TX
+                     <STM32_PINMUX('B', 14, AF7)>; // USART3_RTS
+            bias-disable;
+            drive-push-pull;
+            slew-rate = <0>;
+        };
+        pins2 {
+            pinmux = <STM32_PINMUX('B', 11, AF7)>, // USART3_RX
+                     <STM32_PINMUX('B', 13, AF7)>; // USART3_CTS
+            bias-disable;
+        };
+    };
+};
+```
 
 ### Kernel Configuration (linux.config)
 
 Usually settings already availabe due to Linux console port configuration.
 
+FIXME: define all urat related CONFIG_ properties, refactor bellow list which is not for uart:
+CONFIG_PWM=y
+CONFIG_PWM_STM32=y
+CONFIG_SYSFS=y
+CONFIG_PWM_SYSFS=y   # Often selected automatically with CONFIG_PWM
+
 ### Test Manually via Sysfs
 
-On boot, check:
+1. On boot, check:
 ```
 ls /sys/
 ```
 
 You should see `ttySTM0` (serial console), and new `ttySTM1` (`usart3`).
 
+2. Check if the driver exposes any info in /sys/class/tty/ or /sys/class/serial/
+```
+ls -l /sys/class/tty/
+```
+See driver info
+```
+cat /sys/class/tty/ttySTM1/device/uevent
+```
 
-Test UART:
+3. Check for RS-485-related entries
+
+```
+ls /sys/class/tty/ttySx/device/
+```
+
+4. Using `setserial`
+```
+setserial -g /dev/ttyS*
+```
+This is more common on PC UARTs but sometimes helps on embedded systems.
+
+5. Using `stty`
+
+```
+stty -a -F /dev/ttySTM1
+```
+
+Test UART functions:
 
 ```
 stty -F /dev/ttySTM1 115200 cs8 -cstopb -parenb -ixon -ixoff -crtscts raw
@@ -356,7 +417,15 @@ rs485conf.delay_rts_after_send  = 2;   // 2 ms
 ioctl(fd, TIOCSRS485, &rs485conf);
 ```
 
+
 ## Troubleshooting Checklist
+
+### Check `debugfs`
+
+```
+mount -t debugfs none /sys/kernel/debug
+ls /sys/kernel/debug
+```
 
 ### Verify /dev Nodes
 

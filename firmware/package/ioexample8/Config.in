@@ -1,0 +1,35 @@
+config BR2_PACKAGE_IOEXAMPLE8
+    bool "Example8: Serial RS-485 Interactive Demo"
+    help
+      This package provides a simple interactive demo that configures and
+      communicates over a serial RS-485 interface (e.g., /dev/ttySTM1) on
+      an STM32F4-based board.
+
+      Features:
+        - Opens and configures a serial port at 115200 baud (8N1)
+        - Enables RS-485 mode via ioctl (TIOCSRS485)
+        - Sends user-typed messages from the terminal
+        - Waits for transmission completion (tcdrain)
+        - Gracefully exits on empty input
+        - (Optional) Receives responses with a 100ms timeout
+
+      Usage:
+        $ ioexample8 [<tty device>]
+        Defaults to /dev/ttySTM1 if not specified.
+
+      Dependencies:
+        - Standard Linux serial interface
+        - <linux/serial.h>, termios, ioctl
+        - https://github.com/vsergeev/c-periphery (reference)
+
+      Example:
+        $ ioexample8 /dev/ttySTM1
+
+      Note:
+        The program uses VMIN/VTIME settings for blocking read with timeout.
+        RS-485 flags are configured as:
+          - SER_RS485_ENABLED
+          - SER_RS485_RTS_ON_SEND
+          - ~SER_RS485_RTS_AFTER_SEND
+
+      This demo is useful for verifying UART/RS-485 wiring and behavior.
