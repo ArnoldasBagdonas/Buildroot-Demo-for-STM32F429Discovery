@@ -4,7 +4,8 @@
 
 # === Board & Buildroot config ===
 BOARD_NAME        := stm32f429disco
-BUILDROOT_VERSION := 2024.02.5
+BUILDROOT_VERSION             := 2024.02.5
+BUILDROOT_VERSION_COMMIT_HASH := 6c084947ab46aa8064947b85ea6168b12d550265
 BUILDROOT_DIR     := buildroot
 
 # === SDK config ===
@@ -37,16 +38,22 @@ all: sdk dtb-clean rootfs-clean configure build_all
 # -------------------------------------------------------------
 .PHONY: buildroot
 buildroot:
-	@if [ ! -d "$(BUILDROOT_DIR)" ] || [ ! -d "$(BUILDROOT_DIR)/.git" ]; then \
-		$(ECHO) "==> Setting up Buildroot ($(BUILDROOT_VERSION))..."; \
-		rm -rf $(BUILDROOT_DIR) $(BUILDROOT_DIR)-ccache $(BUILDROOT_DIR)-downloads; \
+	@if [ ! -d "$(BUILDROOT_DIR)" ]; then \
+		$(ECHO) "==> Cloning Buildroot ($(BUILDROOT_VERSION))..."; \
 		git clone --branch $(BUILDROOT_VERSION) --depth 1 https://github.com/buildroot/buildroot.git $(BUILDROOT_DIR); \
 	else \
-		$(ECHO) "⚠ Buildroot already present and correct version: $(BUILDROOT_VERSION)"; \
+		CURRENT_HASH=$$(git -C $(BUILDROOT_DIR) rev-parse HEAD); \
+		if [ "$$CURRENT_HASH" != "$(BUILDROOT_VERSION_COMMIT_HASH)" ]; then \
+			$(ECHO) "==> Buildroot present but incorrect commit ($$CURRENT_HASH ≠ $(BUILDROOT_VERSION_COMMIT_HASH)). Re-cloning..."; \
+			rm -rf $(BUILDROOT_DIR); \
+			git clone --branch $(BUILDROOT_VERSION) --depth 1 https://github.com/buildroot/buildroot.git $(BUILDROOT_DIR); \
+		else \
+			$(ECHO) "✔ Buildroot already present and correct version: $(BUILDROOT_VERSION) ($(BUILDROOT_VERSION_COMMIT_HASH))"; \
+		fi; \
 	fi; \
 	$(ECHO) "==> Ensuring downloads and ccache directories exist..."; \
 	$(MKDIR_P) $(BUILDROOT_DIR)-downloads $(BUILDROOT_DIR)-ccache; \
-	$(ECHO) "   ✔ Buildroot setup complete."
+	$(ECHO) "✔ Buildroot setup complete."
 
 # -------------------------------------------------------------
 # SDK generation
