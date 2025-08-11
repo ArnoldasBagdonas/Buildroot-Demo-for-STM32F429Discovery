@@ -56,6 +56,25 @@
 		regulator-name = "vcc5_host1";
 		regulator-always-on;
 	};
+
+	/* Dummy fixed regulators for ADC */
+	vdda: vdda-reg {
+		compatible = "regulator-fixed";
+		regulator-name = "vdda";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+		status = "okay";
+	};
+
+	vref: vref-reg {
+		compatible = "regulator-fixed";
+		regulator-name = "vref";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+		status = "okay";
+	};
 };
 
 &clk_hse {
@@ -222,4 +241,37 @@
 	rs485-rts-active-high;
 	rs485-rts-delay = <10 10>; /* max 100 ms delay before sending, max 100 ms after sending */
 };
+
+
+//https://www.kernel.org/doc/Documentation/devicetree/bindings/iio/adc/st%2Cstm32-adc.txt
+/* Ensure DMA2 is enabled (ADC dmas reference &dma2 in stm32f429.dtsi). */
+&dma2 {
+	status = "okay";
+};
+
+&gpiof {
+    status = "okay";
+};
+
+&adc3_in8_pin {
+    pins {
+        bias-disable;
+    };
+};
+
+&adc {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&adc3_in8_pin>;
+    vref-supply = <&vref>;
+    vdda-supply = <&vdda>;
+};
+
+/* Enable ADC3 instance with PF10 channel 8 */
+&adc3 {
+    status = "okay";
+    st,adc-channels = <8>;
+	assigned-resolution-bits = <12>;
+};
+
 
