@@ -38,13 +38,13 @@ It also includes a **troubleshooting checklist** for device initialization, driv
 
 ### Pinout Legend
 
-![STM32F429I-DISC1 board](../../../../docs/pinout_legend_2017-06-28-2.png)
+![STM32F429I-DISC1 board](../../../../docs/pinout_legend_2017-06-28-2.jpg)
 
-![STM32F429I-DISC1 board](../../../../docs/disco_f429zi_2017-07-25_slide1.png)
+![STM32F429I-DISC1 board](../../../../docs/disco_f429zi_2017-07-25_slide1.jpg)
 
-![STM32F429I-DISC1 board](../../../../docs/disco_f429zi_2017-07-25_slide2.png)
+![STM32F429I-DISC1 board](../../../../docs/disco_f429zi_2017-07-25_slide2.jpg)
 
-![STM32F429I-DISC1 board](../../../../docs/disco_f429zi_2017-07-25_slide3.png)
+![STM32F429I-DISC1 board](../../../../docs/disco_f429zi_2017-07-25_slide3.jpg)
 
 ## Directory Structure
 
@@ -638,7 +638,7 @@ Optional but recommended:
 - `NO_HZ_IDLE`=n: disables tickless idle; recommended for real-time precision in sleep and timers
 
 
-## Linux Device Driver Troubleshooting Guide
+## Troubleshooting
 
 This guide provides step-by-step troubleshooting procedures and checks for device initialization issues, driver binding problems, device tree verification, and typical hardware/software misconfigurations on Linux systems, focusing on I2C and SPI buses and related peripherals.
 
