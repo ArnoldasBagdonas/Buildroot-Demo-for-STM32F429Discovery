@@ -51,6 +51,7 @@ RUN apt-get update && \
         doxygen \
         doxygen-latex \
         graphviz \
+        plantuml \
         latexmk \
         texlive-latex-base \
         texlive-fonts-recommended \
@@ -100,9 +101,8 @@ RUN mkdir -p /usr/share/fonts/truetype/ubuntu && \
 #     done && \
 #     rm -f /tmp/*.exe && \
 #     fc-cache -f
-RUN echo "deb http://deb.debian.org/debian bookworm main contrib non-free" > /etc/apt/sources.list && \
-    echo "deb http://security.debian.org/debian-security bookworm-security main contrib non-free" >> /etc/apt/sources.list && \
-    echo "deb http://deb.debian.org/debian bookworm-updates main contrib non-free" >> /etc/apt/sources.list && \
+RUN sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
+        /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
     echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | debconf-set-selections && \
     apt-get install -y --no-install-recommends ttf-mscorefonts-installer && \
@@ -110,16 +110,7 @@ RUN echo "deb http://deb.debian.org/debian bookworm main contrib non-free" > /et
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # -------------------------------------------------------------------
-# 7. Download PlantUML
-# -------------------------------------------------------------------
-WORKDIR /plantuml
-RUN wget https://netcologne.dl.sourceforge.net/project/plantuml/plantuml.jar
-
-# Create alias for PlantUML
-RUN echo 'alias plantuml="java -jar /plantuml/plantuml.jar"' >> /etc/bash.bashrc
-
-# -------------------------------------------------------------------
-# 8. Install Clang and LLVM
+# 7. Install Clang and LLVM
 # -------------------------------------------------------------------
 ARG CLANG_VER=16
 WORKDIR /tmp
@@ -137,7 +128,7 @@ RUN ln -s /usr/bin/clang-${CLANG_VER} /usr/bin/clang && \
     ln -s /usr/bin/clang-apply-replacements-${CLANG_VER} /usr/bin/clang-apply-replacements
 
 # -------------------------------------------------------------------
-# 9. Set up Python environment and install requirements
+# 8. Set up Python environment and install requirements
 # -------------------------------------------------------------------
 WORKDIR /tmp
 COPY requirements.txt .
@@ -148,7 +139,7 @@ RUN python3 -m venv /opt/venv && \
 ENV PATH="/opt/venv/bin:$PATH"
 
 # -------------------------------------------------------------------
-# 10 Install Embedded Development and Debugging Tools
+# 9. Install Embedded Development and Debugging Tools
 # -------------------------------------------------------------------
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -161,7 +152,7 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # -------------------------------------------------------------------
-# 11 Add Buildroot tools and optional embedded dependencies
+# 10. Add Buildroot tools and optional embedded dependencies
 # -------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     which sed make binutils diffutils gcc g++ bash patch gzip bzip2 \
@@ -176,7 +167,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # -------------------------------------------------------------------
-# 12. Install misc developer tools (ImageMagick, FFmpeg, etc.)
+# 11. Install misc developer tools (ImageMagick, FFmpeg, etc.)
 # -------------------------------------------------------------------
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -193,7 +184,7 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # -------------------------------------------------------------------
-# 13. Add non-root user and enable passwordless sudo
+# 12. Add non-root user and enable passwordless sudo
 # -------------------------------------------------------------------
 RUN adduser --disabled-password --gecos '' vscode && \
     apt-get update && \
@@ -204,7 +195,7 @@ RUN adduser --disabled-password --gecos '' vscode && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # -------------------------------------------------------------------
-# 14. Copy Devcontainer entry point script to set right permissions for sh scripts that will be used from windows in linux devcontainer
+# 13. Copy Devcontainer entry point script to set right permissions for sh scripts that will be used from windows in linux devcontainer
 # -------------------------------------------------------------------
 COPY entrypoint.sh /usr/local/bin/devcontainer-entrypoint.sh
 RUN chmod +x /usr/local/bin/devcontainer-entrypoint.sh
@@ -212,6 +203,7 @@ RUN chmod +x /usr/local/bin/devcontainer-entrypoint.sh
 # -------------------------------------------------------------------
 # 14. Final setup
 # -------------------------------------------------------------------
-# devcontainer-entrypoint.sh moved to postCreateCommand (devcontainer.json)
-# ENTRYPOINT ["/usr/local/bin/devcontainer-entrypoint.sh"]
-ENTRYPOINT ["/bin/bash", "-c", "while true; do sleep 1000; done"]
+# devcontainer-entrypoint.sh is run by postCreateCommand (devcontainer.json).
+# Keep the container alive without a shell wrapper so Docker and Podman can
+# stop it cleanly with SIGTERM.
+CMD ["sleep", "infinity"]

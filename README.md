@@ -2,6 +2,41 @@
 
 This project provides a structured and automated environment for building a fully customized Linux system using [Buildroot 2024.02](https://buildroot.org) (Linux 6.1+) for the [STM32F429Discovery](https://www.st.com/en/evaluation-tools/32f429idiscovery.html) board.
 
+## Devcontainer Engine Setup
+
+The devcontainer works with either Docker or Podman. VS Code uses Docker by
+default. On a Linux host with Podman, add this to your VS Code **user** settings
+(not the repository settings, so Docker users keep the default):
+
+```json
+"dev.containers.dockerPath": "podman"
+```
+
+Then run **Dev Containers: Rebuild and Reopen in Container**. The Podman setup
+may be rootless; the container is run with the privileges and USB device mapping
+declared in `.devcontainer/devcontainer.json`.
+
+Before Docker or Podman creates the container, the devcontainer
+`initializeCommand` runs `.devcontainer/prepare-stlink-usb.sh` and
+`.devcontainer/prepare-cy-usb.sh` on the host. The scripts find the connected
+ST-LINK device and grant read/write access to its current device node. The
+Cypress script removes the incorrectly matched `cytherm` driver, loads
+`cdc_acm`, and displays the resulting `/dev/ttyACM*` node. The scripts may
+display a host `sudo` or PolicyKit authentication prompt. ST-LINK USB bus and
+device numbers are detected automatically and are not hard-coded.
+
+If host authentication cannot be requested by VS Code, run the preparation
+script once from a host terminal, then rebuild the devcontainer:
+
+```bash
+bash .devcontainer/prepare-stlink-usb.sh
+bash .devcontainer/prepare-cy-usb.sh
+```
+
+The host must provide `/dev/bus/usb` before the container starts. On a native
+Linux host this is normally already present. On Windows with WSL2, attach the
+device as described below first.
+
 ## USB Setup Workflow for WSL2 + Devcontainer
 
 > **Important**: The USB device must be connected and attached to WSL **before launching the devcontainer or Docker image**.
