@@ -1,133 +1,76 @@
-#include <stdlib.h>
-#include <stdbool.h>
+#include <fcntl.h>
+#include <linux/gpio.h>
 #include <stdio.h>
 #include <string.h>
-#include <fcntl.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
-#include <errno.h>
 
-#include "periphery/led.h"
+#define LED_CHIP "/dev/gpiochip6"
+#define LED_LINE 14
 
-#define STRINGIFY(x) #x
-#define TOSTRING(x) STRINGIFY(x)
-
-// Modify this if you want a different LED name
-#define LED_NAME "led-green"
-#define ORIGINAL_TRIGGER "heartbeat"
-
-// Clear kernel trigger (e.g., "heartbeat") for manual control
-void clear_led_trigger(const char *led_name)
+static int open_led(void)
 {
-    char path[128];
-    snprintf(path, sizeof(path), "/sys/class/leds/%s/trigger", led_name);
+    struct gpio_v2_line_request request = {0};
+    int chip_fd;
 
-    int fd = open(path, O_WRONLY);
-    if (fd < 0)
+    chip_fd = open(LED_CHIP, O_RDONLY);
+    if (chip_fd < 0)
     {
-        fprintf(stderr, "Warning: Failed to open '%s': %s\n", path, strerror(errno));
-        return;
+        perror("open " LED_CHIP);
+        return -1;
     }
 
-    if (write(fd, "none", strlen("none")) < 0)
+    request.offsets[0] = LED_LINE;
+    request.num_lines = 1;
+    request.config.flags = GPIO_V2_LINE_FLAG_OUTPUT;
+    strncpy(request.consumer, "ioexample1", sizeof(request.consumer) - 1);
+
+    if (ioctl(chip_fd, GPIO_V2_GET_LINE_IOCTL, &request) < 0)
     {
-        fprintf(stderr, "Warning: Failed to write 'none' to '%s': %s\n", path, strerror(errno));
-    }
-    else
-    {
-        printf("Cleared trigger for %s\n", led_name);
+        perror("GPIO_V2_GET_LINE_IOCTL");
+        close(chip_fd);
+        return -1;
     }
 
-    close(fd);
+    close(chip_fd);
+    return request.fd;
 }
 
-// Restore kernel trigger (e.g., "heartbeat") on exit
-void restore_led_trigger(const char *led_name, const char *trigger)
+static int set_led(int fd, int on)
 {
-    char path[128];
-    snprintf(path, sizeof(path), "/sys/class/leds/%s/trigger", led_name);
+    struct gpio_v2_line_values values = {
+        .bits = on ? 1 : 0,
+        .mask = 1,
+    };
 
-    int fd = open(path, O_WRONLY);
-    if (fd < 0)
-    {
-        fprintf(stderr, "Warning: Failed to open '%s' to restore trigger: %s\n", path, strerror(errno));
-        return;
-    }
-
-    if (write(fd, trigger, strlen(trigger)) < 0)
-    {
-        fprintf(stderr, "Warning: Failed to write '%s' to '%s': %s\n", trigger, path, strerror(errno));
-    }
-    else
-    {
-        printf("Restored trigger '%s' for %s\n", trigger, led_name);
-    }
-
-    close(fd);
+    return ioctl(fd, GPIO_V2_LINE_SET_VALUES_IOCTL, &values);
 }
 
 int main(void)
 {
-#ifdef PERIPHERY_GPIO_CDEV_SUPPORT
-    printf("periphery PERIPHERY_GPIO_CDEV_SUPPORT is defined as: %s\n", TOSTRING(PERIPHERY_GPIO_CDEV_SUPPORT));
-#else
-    printf("Error: periphery PERIPHERY_GPIO_CDEV_SUPPORT is undefined...\n");
-    exit(1);
-#endif
-
-    led_t *led;
-    unsigned int max_brightness;
-
-    clear_led_trigger(LED_NAME);
-
-    printf("Creating LED object...\n");
-    led = led_new();
-    if (!led)
-    {
-        printf("Error: led_new() returned NULL\n");
-        exit(1);
-    }
-
-    printf("Opening LED '%s'...\n", LED_NAME);
-    if (led_open(led, LED_NAME) < 0)
-    {
-        printf("Error: led_open() failed: %s\n", led_errmsg(led));
-        led_free(led);
-        exit(1);
-    }
-    printf("LED '%s' opened successfully.\n", LED_NAME);
-
-    if (led_get_max_brightness(led, &max_brightness) < 0)
-    {
-        printf("Error: led_get_max_brightness() failed: %s\n", led_errmsg(led));
-        led_close(led);
-        led_free(led);
-        exit(1);
-    }
-
     char input[16];
-    while (true)
+    int led_fd = open_led();
+
+    if (led_fd < 0)
+        return 1;
+
+    printf("Red LED ready on PG14.\n");
+    for (;;)
     {
         printf("\nEnter 1 to turn ON, 0 to turn OFF, q to quit: ");
-        if (fgets(input, sizeof(input), stdin) == NULL)
-            continue;
+        if (!fgets(input, sizeof(input), stdin))
+            break;
 
-        if (input[0] == '1')
+        if (input[0] == '1' || input[0] == '0')
         {
-            if (led_write(led, true) < 0)
-                printf("Error: led_write(true) failed: %s\n", led_errmsg(led));
+            int on = input[0] == '1';
+            if (set_led(led_fd, on) < 0)
+                perror("GPIO_V2_LINE_SET_VALUES_IOCTL");
             else
-                printf("LED turned ON.\n");
-        }
-        else if (input[0] == '0')
-        {
-            if (led_write(led, false) < 0)
-                printf("Error: led_write(false) failed: %s\n", led_errmsg(led));
-            else
-                printf("LED turned OFF.\n");
+                printf("LED turned %s.\n", on ? "ON" : "OFF");
         }
         else if (input[0] == 'q' || input[0] == 'Q')
         {
-            printf("Exiting program...\n");
             break;
         }
         else
@@ -136,10 +79,7 @@ int main(void)
         }
     }
 
-    led_close(led);
-    led_free(led);
-
-    restore_led_trigger(LED_NAME, ORIGINAL_TRIGGER);
-
+    set_led(led_fd, 0);
+    close(led_fd);
     return 0;
 }

@@ -91,7 +91,7 @@ int configure_rs485()
     rs485conf.flags |= SER_RS485_RTS_ON_SEND;     // RTS high during send
     rs485conf.flags &= ~SER_RS485_RTS_AFTER_SEND; // RTS low after send
 
-    // Optional RTS delay (microseconds)
+    // Optional RTS delay (milliseconds)
     rs485conf.delay_rts_before_send = 1;
     rs485conf.delay_rts_after_send = 1;
 

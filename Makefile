@@ -11,6 +11,7 @@ BUILDROOT_DIR     := buildroot
 # === SDK config ===
 SDK_DIR  := buildroot-sdk
 SDK_NAME := arm-buildroot-uclinux-uclibcgnueabi_sdk-buildroot.tar.gz
+SDK_ARCHIVE := $(SDK_DIR)/$(SDK_NAME)
 
 # === External customization paths ===
 BR2_EXTERNAL_DIR    := $(realpath firmware)
@@ -60,9 +61,9 @@ buildroot:
 # -------------------------------------------------------------
 .PHONY: sdk
 sdk: buildroot
-	@if [ ! -f "$(SDK_DIR)/$(SDK_NAME)" ]; then \
+	@if [ ! -f "$(SDK_ARCHIVE)" ]; then \
 		$(ECHO) "==> Building SDK..."; \
-		$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_SDK) defconfig || exit $$?; \
+		$(MAKE_BR) BR2_EXTERNAL=$(BR2_EXTERNAL_DIR) BR2_DEFCONFIG=$(DEFCONFIG_SDK) defconfig || exit $$?; \
 		$(MAKE_BR) sdk || exit $$?; \
 		if [ -f "$(BUILDROOT_DIR)/output/images/$(SDK_NAME)" ]; then \
 			$(MKDIR_P) $(SDK_DIR); \
@@ -73,7 +74,7 @@ sdk: buildroot
 			exit 1; \
 		fi; \
 	else \
-		$(ECHO) "⚠ SDK already exists at: $(SDK_DIR)/$(SDK_NAME)"; \
+		$(ECHO) "⚠ SDK already exists at: $(SDK_ARCHIVE)"; \
 	fi
 
 # -------------------------------------------------------------
@@ -81,10 +82,10 @@ sdk: buildroot
 # -------------------------------------------------------------
 .PHONY: configure sdk-configure
 configure: buildroot
-	@$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_ALL) defconfig
+	@$(MAKE_BR) BR2_EXTERNAL=$(BR2_EXTERNAL_DIR) BR2_DEFCONFIG=$(DEFCONFIG_ALL) defconfig
 
 sdk-configure: buildroot
-	@$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_SDK) defconfig
+	@$(MAKE_BR) BR2_EXTERNAL=$(BR2_EXTERNAL_DIR) BR2_DEFCONFIG=$(DEFCONFIG_SDK) defconfig
 
 # -------------------------------------------------------------
 # Build and flash targets
@@ -93,7 +94,33 @@ sdk-configure: buildroot
 build_all: sdk
 	@$(MAKE_BR)
 
-rebuild_all: distclean dtb-clean configure build_all
+rebuild_all: buildroot
+	@set -eu; \
+	if [ ! -s "$(SDK_ARCHIVE)" ]; then \
+		$(ECHO) "✖ Missing SDK archive: $(SDK_ARCHIVE)" >&2; \
+		$(ECHO) "  Run 'make sdk' once before 'make rebuild_all'." >&2; \
+		exit 1; \
+	fi; \
+	if ! tar -tzf "$(SDK_ARCHIVE)" >/dev/null; then \
+		$(ECHO) "✖ Invalid SDK archive: $(SDK_ARCHIVE)" >&2; \
+		exit 1; \
+	fi; \
+	SDK_HASH_BEFORE=$$(sha256sum "$(SDK_ARCHIVE)" | cut -d' ' -f1); \
+	$(ECHO) "==> Preserving SDK: $(SDK_ARCHIVE) ($$SDK_HASH_BEFORE)"; \
+	$(ECHO) "==> Removing all generated Buildroot output..."; \
+	$(MAKE_BR) distclean; \
+	$(ECHO) "==> Loading tracked project configuration..."; \
+	$(MAKE_BR) BR2_EXTERNAL="$(BR2_EXTERNAL_DIR)" BR2_DEFCONFIG="$(DEFCONFIG_ALL)" defconfig; \
+	$(ECHO) "==> Building system from a clean output tree..."; \
+	$(MAKE_BR); \
+	test -s "$(BUILDROOT_DIR)/output/images/xipImage"; \
+	test -s "$(BUILDROOT_DIR)/output/images/stm32f429disco-custom.dtb"; \
+	SDK_HASH_AFTER=$$(sha256sum "$(SDK_ARCHIVE)" | cut -d' ' -f1); \
+	if [ "$$SDK_HASH_BEFORE" != "$$SDK_HASH_AFTER" ]; then \
+		$(ECHO) "✖ SDK archive changed during the system rebuild." >&2; \
+		exit 1; \
+	fi; \
+	$(ECHO) "✔ Clean system rebuild complete; SDK archive unchanged."
 
 distclean:
 	@$(MAKE_BR) distclean
@@ -110,7 +137,7 @@ menuconfig: buildroot
 	@$(MAKE_BR) BR2_EXTERNAL=$(BR2_EXTERNAL_DIR) menuconfig
 
 savedefconfig:
-# After savedefconfig to rebuild a specified package run: make make <pkg>-rebuild
+# After savedefconfig, rebuild a specified package with: make <pkg>-rebuild
 	@$(MAKE_BR) BR2_DEFCONFIG=$(DEFCONFIG_ALL) savedefconfig
 
 sdk-savedefconfig:
@@ -178,7 +205,7 @@ linux-rebuild:
 
 dtb-clean:
 	@$(ECHO) "==> Deleting custom device tree..."
-	@$(RM_F) $(BUILDROOT_DIR)/output/images/stm32f429-disco-custom.dtb
+	@$(RM_F) $(BUILDROOT_DIR)/output/images/stm32f429disco-custom.dtb
 	@$(ECHO) "   ✔ Custom device tree delete complete."
 
 dtb-rebuild: dtb-clean linux-rebuild build_all

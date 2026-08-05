@@ -1,5 +1,5 @@
 config BR2_PACKAGE_IOEXAMPLE7
-    bool "Example6: Serial Interactive Demo (UART communication)"
+    bool "Example7: Serial Interactive Demo (UART communication)"
     help
       This package provides a simple utility demonstrating the usage of
       the Linux serial interface on an STM32F4-based board.

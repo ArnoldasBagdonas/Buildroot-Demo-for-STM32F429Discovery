@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <sys/ioctl.h>
 #include <linux/rtc.h>
 
@@ -374,21 +376,73 @@ int test_set_system_settimeofday(int year, int mon, int day, int hour, int min, 
     return 0;
 }
 
-void test_set_time_hwclock(void)
+void test_rtc_sync(void)
 {
-    printf("=== Testing set system time with hwclock() ===\n");
-    int ret;
-    ret = system("hwclock -w");
-    if (ret != 0)
-        printf("hwclock -w failed with return code %d\n", ret);
-    else
-        printf("hwclock -w succeeded\n");
+    struct timespec system_time = {0};
+    struct rtc_time rtc_time = {0};
+    struct tm utc = {0};
+    int rtc_fd;
 
-    ret = system("hwclock -s");
-    if (ret != 0)
-        printf("hwclock -s failed with return code %d\n", ret);
+    printf("=== Testing RTC write/read with ioctl() ===\n");
+    rtc_fd = open("/dev/rtc0", O_RDWR);
+    if (rtc_fd < 0)
+    {
+        printf("open /dev/rtc0 failed: %s\n\n", strerror(errno));
+        return;
+    }
+
+    if (clock_gettime(CLOCK_REALTIME, &system_time) != 0 ||
+        !gmtime_r(&system_time.tv_sec, &utc))
+    {
+        printf("read system time failed: %s\n", strerror(errno));
+        close(rtc_fd);
+        return;
+    }
+
+    rtc_time.tm_sec = utc.tm_sec;
+    rtc_time.tm_min = utc.tm_min;
+    rtc_time.tm_hour = utc.tm_hour;
+    rtc_time.tm_mday = utc.tm_mday;
+    rtc_time.tm_mon = utc.tm_mon;
+    rtc_time.tm_year = utc.tm_year;
+    rtc_time.tm_wday = utc.tm_wday;
+    rtc_time.tm_yday = utc.tm_yday;
+    rtc_time.tm_isdst = 0;
+
+    if (ioctl(rtc_fd, RTC_SET_TIME, &rtc_time) < 0)
+    {
+        printf("RTC_SET_TIME failed: %s\n", strerror(errno));
+        close(rtc_fd);
+        return;
+    }
+    printf("system time copied to RTC\n");
+
+    memset(&rtc_time, 0, sizeof(rtc_time));
+    if (ioctl(rtc_fd, RTC_RD_TIME, &rtc_time) < 0)
+    {
+        printf("RTC_RD_TIME failed: %s\n", strerror(errno));
+        close(rtc_fd);
+        return;
+    }
+
+    memset(&utc, 0, sizeof(utc));
+    utc.tm_sec = rtc_time.tm_sec;
+    utc.tm_min = rtc_time.tm_min;
+    utc.tm_hour = rtc_time.tm_hour;
+    utc.tm_mday = rtc_time.tm_mday;
+    utc.tm_mon = rtc_time.tm_mon;
+    utc.tm_year = rtc_time.tm_year;
+    utc.tm_isdst = 0;
+    system_time.tv_sec = timegm(&utc);
+    system_time.tv_nsec = 0;
+
+    if (system_time.tv_sec == (time_t)-1 ||
+        clock_settime(CLOCK_REALTIME, &system_time) < 0)
+        printf("copy RTC to system time failed: %s\n", strerror(errno));
     else
-        printf("hwclock -s succeeded\n");
+        printf("RTC time copied to system clock\n");
+
+    close(rtc_fd);
     printf("\n");
 }
 
@@ -411,7 +465,7 @@ int main()
     // Set system time to a fixed date/time (example: 2020-01-01 12:00:00)
     test_set_system_time(2020, 1, 1, 12, 0, 0);
     test_set_system_settimeofday(2020, 1, 1, 12, 0, 0);
-    test_set_time_hwclock();
+    test_rtc_sync();
 
     printf("Tests completed.\n");
 

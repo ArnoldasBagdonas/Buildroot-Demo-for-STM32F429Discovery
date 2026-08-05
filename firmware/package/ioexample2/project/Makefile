@@ -16,14 +16,14 @@ OBJ_DIR = $(BIN_DIR)/obj
 # Include directory for headers
 INCLUDES = -I./include
 
-# Source and object file discovery
-SRC := $(wildcard $(SRC_DIR)/**/*.c) $(wildcard $(SRC_DIR)/*.c)
+# Compile only the implementation used by this example.
+SRC := $(SRC_DIR)/main.c
 OBJ := $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRC))
 
 # Compiler settings
 CC      ?= gcc
 CFLAGS  ?= $(MINISIZE_FLAGS)
-LDFLAGS ?= $(CFLAGS)
+LDFLAGS ?= $(CFLAGS) -Wl,--gc-sections
 
 # Default target
 all: $(BIN_DIR)/$(TARGET) copy-config

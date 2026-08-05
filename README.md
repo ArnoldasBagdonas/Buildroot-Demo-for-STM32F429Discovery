@@ -82,7 +82,7 @@ Buildroot automates the creation of complete embedded Linux systems, including t
 - Build the toolchain, kernel, rootfs, and packages.
 - Flash the target board using `flash.sh`.
 - Maintain kernel/device tree patches in `linux-patches/`.
-- Customize the root filesystem via `rootfs-overlay/`.
+- Customize the root filesystem via the tracked minimal overlay.
 
 ### Project Directory Structure
 > **Note**: The directories `buildroot-ccache/` and `buildroot-downloads/` are created automatically and used to optimize caching and downloads. These are gitignored by default.
@@ -97,7 +97,7 @@ workspace/
 │   │   ├── linux.config                  ← Custom Linux kernel configuration file
 │   │   ├── busybox.config                ← Custom BusyBox configuration file
 │   │   ├── flash.sh                      ← Flashing script for programming the board
-│   │   ├── rootfs-overlay/               ← Files to overlay on the target root filesystem
+│   │   ├── rootfs-minimal-overlay/       ← Files for the minimal target root filesystem
 │   │   ├── dts/                          ← Device Tree Source files for hardware description
 │   │   └── linux-patches/                ← Kernel patch files and helper scripts
 │   ├── configs/                          ← Buildroot defconfigs
@@ -138,6 +138,7 @@ BR2_EXTERNAL=firmware
 | `make`          | Full system build: toolchain, kernel, rootfs, and packages      |
 | `make buildroot`| Downloads/prepares Buildroot in `buildroot/`                    |
 | `make sdk`      | Builds the standalone SDK to  `buildroot-sdk/`                  |
+| `make rebuild_all` | Clean system rebuild that validates and preserves the saved SDK |
 | `make toolchain`| Builds only the cross-toolchain                                 |
 | `make linux`    | Compiles the Linux kernel                                       |
 | `make busybox`  | Compiles BusyBox                                                |
@@ -191,7 +192,7 @@ Global hooks can be defined per board:
 | Hook File                            | When It Runs                                 |
 |--------------------------------------|----------------------------------------------|
 | `board/<boardname>/pre-build.sh`     | Runs before the root filesystem is populated |
-| `board/<boardname>/post-build.sh`    | Runs after populating `output/target/`       |
+| `board/<boardname>/post-build.sh`    | Runs after populating `buildroot/output/target/` |
 | `board/<boardname>/post-image.sh`    | Runs after image creation                    |
 | `board/<boardname>/post-genext2fs.sh`| Runs before finalizing `.ext2` image         |
 
@@ -207,35 +208,36 @@ BR2_ROOTFS_POST_IMAGE_SCRIPT="board/boardname/post-image.sh"
 Buildroot generates a root filesystem in:
 
 ```
-output/target/
+buildroot/output/target/
 ```
 
-Overlay files placed in:
+The tracked minimal overlay is:
 
 ```
-BR2_ROOTFS_OVERLAY = board/boardname/rootfs-overlay
+BR2_ROOTFS_OVERLAY="/workspace/firmware/board/stm32f429disco/rootfs-minimal-overlay"
 ```
-are copied directly into the final root filesystem at `output/target/`.
+Its files are copied into `buildroot/output/target/`.
 
 ### Output Image Artifacts
 
-Final image files are located under `output/images/`.
+Final image files are located under `buildroot/output/images/`.
 
-| File Type                    | Path               | Description                                |
-|------------------------------|--------------------|--------------------------------------------|
-| `zImage` / `uImage`          | `output/images/`   | Compressed Linux kernel image              |
-| `rootfs.ext2`, `.cpio`, etc. | `output/images/`   | Root filesystem in various formats         |
-| `sdcard.img` / `.tar`        | `output/images/`   | Optional prebuilt SD card image or archive |
-| `sdk.tar.gz`                 | `output/images/`   | Prebuilt toolchain and sysroot archive     |
+| File Type                    | Path                        | Description                                |
+|------------------------------|-----------------------------|--------------------------------------------|
+| `xipImage`                   | `buildroot/output/images/` | XIP kernel with embedded initramfs         |
+| `rootfs.cpio`                | `buildroot/output/images/` | Generated initramfs archive                |
+| `*.dtb`                      | `buildroot/output/images/` | Compiled device trees                      |
+| SDK archive                  | `buildroot-sdk/`            | Preserved toolchain and sysroot archive    |
 
 ### Rebuilding & Cleaning Targets
 
 | Target                | Description                                        |
 |-----------------------|----------------------------------------------------|
-| `make clean`          | Removes all output files except downloaded sources |
-| `make distclean`      | Full clean including configs and downloads         |
+| `make clean`          | Removes generated build products but keeps the Buildroot configuration |
+| `make distclean`      | Removes `buildroot/output/`; preserves downloads, ccache, and the saved SDK |
+| `make rebuild_all`    | Validates the SDK, runs `distclean`, loads tracked configs, and builds |
 | `make dtb-clean`      | Cleans device tree                                 |
-| `make rootfs-clean`   | Cleans `target/`                                   |
+| `make rootfs-clean`   | Cleans `buildroot/output/target/`                  |
 | `make rootfs-rebuild` | Rebuilds root filesystem                           |
 | `make linux-rebuild`  | Rebuilds Linux kernel                              |
 | `make busybox-rebuild`| Rebuilds BusyBox                                   |
@@ -247,10 +249,35 @@ Buildroot does not include built-in flash or deployment targets. Custom targets 
 
 Tools such as [stlink](https://github.com/stlink-org/stlink), `dfu-util`, [openocd](https://github.com/openocd-org/openocd), `scp`, or `rsync` can be used to implement flashing or deployment commands.
 
-Example flash command:
+Inside the devcontainer, flash without `sudo`:
 
 ```bash
-sudo make flash
+make flash
+```
+
+### Clean build while preserving the SDK
+
+The main configuration uses the saved external toolchain archive:
+
+```
+buildroot-sdk/arm-buildroot-uclinux-uclibcgnueabi_sdk-buildroot.tar.gz
+```
+
+Run this from `/workspace` inside the devcontainer:
+
+```bash
+make rebuild_all
+```
+
+The target validates the SDK archive before deleting `buildroot/output/`,
+records its SHA-256 checksum, builds from the tracked Buildroot, kernel, and
+BusyBox configurations, and confirms that the SDK checksum did not change.
+The `buildroot-downloads/` and `buildroot-ccache/` caches are preserved.
+
+Program the rebuilt image separately:
+
+```bash
+make flash
 ```
 
 ## Getting Started
@@ -267,7 +294,7 @@ Build and deploy using:
 
 ```
 make all
-sudo make flash
+make flash
 ```
 
 ## References

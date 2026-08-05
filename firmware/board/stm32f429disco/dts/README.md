@@ -2,7 +2,8 @@
 
 This guide provides step-by-step instructions for configuring **Device Tree Source (DTS)** files and Linux kernel settings for `I2C`, `SPI`, `PWM`, and `Serial` interfaces on the `STM32F429I-DISC1` board.
 
-It also includes a **troubleshooting checklist** for device initialization, driver binding, and runtime issues.
+The tracked configuration is production-minimal. Kernel logging, procfs, and
+debugfs are intentionally disabled to reduce the XIP image.
 
 ---
 
@@ -16,10 +17,9 @@ It also includes a **troubleshooting checklist** for device initialization, driv
     - [SPI](#spi)
     - [MEM](#mem)
     - [PWM](#pwm)
-    - [ADC](#adc)
     - [Serial (USART/RS-485)](#serial)
 	- [Linux sleep functions](#linux-sleep-functions)
-5. [Troubleshooting](#troubleshooting)
+5. [Debugging a development image](#debugging-a-development-image)
 6. [References](#references)
 7. [License](#license)
 
@@ -87,7 +87,7 @@ make dtb-rebuild
 ### GPIO
 This example configures the on-board LEDs and user button for user-space access:
 - `ioexample1` works on LED sysfs entries (`/sys/class/leds`) to control LED triggers and brightness.
-- `ioexample2` opens GPIO chips (`/dev/gpiochipX`) and lines directly to read button input and control LEDs.
+- `ioexample2` opens GPIO chips (`/dev/gpiochipX`) directly. It reads the user button on `PA0` and drives the otherwise unclaimed green LED on `PG13`.
 
 **Test Manually via `sysfs`**:
 
@@ -97,15 +97,14 @@ After boot:
 # List LEDs exposed via sysfs
 ls /sys/class/leds
 
-# Expected entries (may vary per board DTS):
-led-green
+# Expected entry:
 led-red
 ```
 
-Manually control green LED:
+Manually control the red LED:
 
 ```bash
-# Clear heartbeat trigger to manually control green LED
+# Clear the heartbeat trigger for manual control
 echo none > /sys/class/leds/led-red/trigger
 
 # Turn LED ON
@@ -125,19 +124,6 @@ echo 0 > /sys/class/leds/led-red/brightness
 			gpios = <&gpiog 14 0>;
 			linux,default-trigger = "heartbeat";
 		};
-		// led-green {
-		//	gpios = <&gpiog 13 0>;
-		//	/* linux,default-trigger = "heartbeat"; */
-		// };
-	};
-	gpio-keys {
-		compatible = "gpio-keys";
-		autorepeat;
-		button-0 {
-			label = "User";
-			linux,code = <KEY_HOME>;
-			gpios = <&gpioa 0 0>;
-		};
 	};
 . . .
 
@@ -153,25 +139,18 @@ echo 0 > /sys/class/leds/led-red/brightness
 **Kernel Configuration** (`linux.config`)
 
 - `CONFIG_GPIOLIB`=y: enables the GPIO subsystem allowing drivers and user-space access to GPIO lines.
-- `CONFIG_GPIO_SYSFS`=y: exposes GPIO lines as files in `/sys/class/gpio` for simple user-space control.
 - `CONFIG_GPIO_CDEV`=y: provides character device interface `/dev/gpiochipN` for advanced GPIO management.
 - `CONFIG_NEW_LEDS`=y: enables the LED class framework.
 - `CONFIG_LEDS_GPIO`=y: supports LEDs connected via GPIO lines.
 
-Not implemented yet in this example(!):
-
-- `CONFIG_KEYBOARD_GPIO`=y: enables input device support for buttons/switches connected via GPIO, allowing event reporting.
-
 > **Notes**:
-  - `led-green` and `led-red` are controlled via `/sys/class/leds`.
-  - `ioexample1` works on LED `sysfs` entries.
-  - `ioexample2` opens GPIO chips (/dev/gpiochipX) and lines directly.
-  - The User button is accessible as a GPIO input line (`A0` → `/dev/gpiochip0`, line 0) and also appears as an input event device when `gpio-keys` is enabled.
+  - Only `led-red` is registered with the LED class; `ioexample1` controls it through `/sys/class/leds/led-red`.
+  - `ioexample2` uses the GPIO character-device API for `PA0` and `PG13`.
+  - The button is deliberately not claimed by `gpio-keys`, and the green LED is deliberately not claimed by `gpio-leds`, so both lines remain available to `ioexample2`.
 
 ### I2C
 
-The `STM32F429Discovery` board features `I2C3`, which by default connects to the `STMPE811` touchscreen controller.
-The following example configures this interface for both the touchscreen and user-space access (e.g., via the `ioexample3` application).
+The `STM32F429Discovery` board features `I2C3`. The minimal profile exposes the controller directly to user space for `ioexample3`; it does not enable the unused STMPE811 touchscreen stack.
 
 **Device Tree** (`stm32f429disco-custom.dts`):
 
@@ -181,44 +160,6 @@ The following example configures this interface for both the touchscreen and use
 	pinctrl-0 = <&i2c3_pins>;
 	clock-frequency = <100000>;
 	status = "okay";
-
-	stmpe811@41 {
-		compatible = "st,stmpe811";
-		reg = <0x41>;
-		interrupts = <15 IRQ_TYPE_EDGE_FALLING>;
-		interrupt-parent = <&gpioa>;
-		/* 3.25 MHz ADC clock speed */
-		st,adc-freq = <1>;
-		/* 12-bit ADC */
-		st,mod-12b = <1>;
-		/* internal ADC reference */
-		st,ref-sel = <0>;
-		/* ADC converstion time: 80 clocks */
-		st,sample-time = <4>;
-
-		stmpe_touchscreen {
-			compatible = "st,stmpe-ts";
-			/* 8 sample average control */
-			st,ave-ctrl = <3>;
-			/* 7 length fractional part in z */
-			st,fraction-z = <7>;
-			/*
-			 * 50 mA typical 80 mA max touchscreen drivers
-			 * current limit value
-			 */
-			st,i-drive = <1>;
-			/* 1 ms panel driver settling time */
-			st,settling = <3>;
-			/* 5 ms touch detect interrupt delay */
-			st,touch-det-delay = <5>;
-		};
-
-		stmpe_adc {
-			compatible = "st,stmpe-adc";
-			/* forbid to use ADC channels 3-0 (touch) */
-			st,norequest-mask = <0x0F>;
-		};
-	};
 };
 ```
 
@@ -231,10 +172,7 @@ The following example configures this interface for both the touchscreen and use
 
 ### SPI
 
-The STM32F429Discovery board supports `SPI5`, typically mapped as:
-
-- `CS0` → Gyroscope (`L3GD20`) or fallback `spidev` device
-- `CS1` → Display panel (`ILI9341`-compatible)
+The minimal profile exposes the onboard `L3GD20` gyroscope on `SPI5` chip select 0 as `/dev/spidev0.0` for `ioexample4`.
 
 > **Note**:
   
@@ -242,7 +180,7 @@ The STM32F429Discovery board supports `SPI5`, typically mapped as:
   
   - If `"st,l3gd20-gyro"` is present and supported, the kernel will automatically bind to the `L3GD20` driver. Otherwise, `/dev/spidev*` will be exposed for testing or debugging.
 
-This example configures `SPI5` for both the gyroscope and display, while still allowing user-space access (e.g., via the `ioexample4` application).
+The LCD/display stack and its second chip select are not enabled because no package example uses them.
 
 **Device Tree** (`stm32f429disco-custom.dts`)
 
@@ -253,7 +191,7 @@ This example configures `SPI5` for both the gyroscope and display, while still a
 	pinctrl-names = "default";
 	#address-cells = <1>;
 	#size-cells = <0>;
-	cs-gpios = <&gpioc 1 GPIO_ACTIVE_LOW>, <&gpioc 2 GPIO_ACTIVE_LOW>;
+	cs-gpios = <&gpioc 1 GPIO_ACTIVE_LOW>;
     
 	l3gd20: l3gd20@0 {
 		/* Note: Order of compatible strings matters! Uses L3GD20 driver if available, otherwise spidev ("rohm,dh2228fv")  fallback */
@@ -266,20 +204,6 @@ This example configures `SPI5` for both the gyroscope and display, while still a
 				<2 IRQ_TYPE_EDGE_RISING>;
 		reg = <0>;
 		status = "okay";
-	};
-
-	display: display@1{
-		/* Connect panel-ilitek-9341 to ltdc */
-		compatible = "st,sf-tc240t-9370-t", "ilitek,ili9341";
-		reg = <1>;
-		spi-3wire;
-		spi-max-frequency = <10000000>;
-		dc-gpios = <&gpiod 13 0>;
-		port {
-			panel_in_rgb: endpoint {
-			remote-endpoint = <&ltdc_out_rgb>;
-			};
-		};
 	};
 };
 ```
@@ -302,7 +226,7 @@ This `ioexample5` demonstrates direct access to STM32F4 memory-mapped registers 
 This reads the RCC_CR register directly, but you’d still need to decode the register manually or with a script:
 
 ```bash
-sudo dd if=/dev/mem bs=4 count=1 skip=$((0x40023800/4)) 2>/dev/null | od -t x4
+dd if=/dev/mem bs=4 count=1 skip=$((0x40023800/4)) 2>/dev/null | od -t x4
 ```
 
 **Device Tree** (`stm32f429disco-custom.dts`)
@@ -374,7 +298,6 @@ echo 0 > unexport
 - `CONFIG_PWM_STM32`=y: STM32-specific PWM driver support for timers used as PWM controllers.
 - `CONFIG_PWM_SYSFS`=y: provides sysfs interface under /sys/class/pwm for user-space control of PWM devices.
 - `CONFIG_SYSFS`=y: enables the sysfs pseudo-filesystem exposing kernel objects and device attributes to user-space.
-- `CONFIG_CONFIGFS_FS`=y: supports a userspace-driven configuration filesystem, often required for advanced device configuration.
 
 ### SERIAL
 
@@ -394,7 +317,7 @@ After boot:
 
 ```bash
 # Check available devices
-ls /sys/
+ls /dev/ttySTM*
 
 # Expected:
 /dev/ttySTM0
@@ -453,11 +376,8 @@ RS-485 with DE GPIO control:
     pinctrl-0 = <&usart3_pins_a>;
 	status = "okay";
 
-	/* Enable RS485 and DE GPIO control*/
-	linux,rs485-enabled-at-boot-time;
+	/* ioexample8 enables RS-485 dynamically; use PD12 for DE control. */
 	rts-gpios = <&gpiod 12 GPIO_ACTIVE_HIGH>;
-	rs485-rts-active-high;
-	rs485-rts-delay = <1 1>; /* max 100 ms delay before sending, max 100 ms after sending */
 };
 ```
 
@@ -502,83 +422,6 @@ Alternatively, hardware flow control (RTS/CTS):
 > **Note**: these are usually enabled if a serial console is already configured.
 
 
-### ADC
-
-This configuration demonstratesthe ADC (Analog-to-Digital Converter) on the STM32F429Discovery board features. The example focuses on ADC3 channel 8 (PF10 pin) configured for 12-bit resolution.
-
-**Test Manually via Command Line**:
-
-After booting your system with ADC enabled in the Device Tree and kernel, you can access ADC readings via the Industrial I/O (iio) subsystem sysfs interface:
-
-```bash
-ls /sys/bus/iio/devices/
-# You should see something like iio:device0 or similar
-
-ls /sys/bus/iio/devices/iio:device0/
-# Look for files like in_voltage8_raw, in_voltage8_scale, in_voltage8_offset
-
-cat /sys/bus/iio/devices/iio:device0/in_voltage8_raw
-# Returns raw ADC counts (integer between 0 and 4095 for 12-bit resolution)
-
-cat /sys/bus/iio/devices/iio:device0/in_voltage8_scale
-# Returns scale factor in volts per step (e.g., 0.000805664)
-```
-
-Calculate voltage manually:
-
-```bash
-raw=$(cat /sys/bus/iio/devices/iio:device0/in_voltage8_raw)
-scale=$(cat /sys/bus/iio/devices/iio:device0/in_voltage8_scale)
-echo "Voltage = $(echo "$raw * $scale" | bc -l) V"
-```
-
-Continuous reading with watch:
-```bash
-watch -n 1 cat /sys/bus/iio/devices/iio:device0/in_voltage8_raw
-```
-**Device Tree** (`stm32f429disco-custom.dts`)
-
-```dts
-/* Ensure DMA2 is enabled (ADC dmas reference &dma2 in stm32f429.dtsi). */
-&dma2 {
-	status = "okay";
-};
-
-&gpiof {
-    status = "okay";
-};
-
-&adc3_in8_pin {
-    pins {
-        bias-disable;
-    };
-};
-
-&adc {
-    status = "okay";
-    pinctrl-names = "default";
-    pinctrl-0 = <&adc3_in8_pin>;
-    vref-supply = <&vref>;
-    vdda-supply = <&vdda>;
-};
-
-/* Enable ADC3 instance with PF10 channel 8 */
-&adc3 {
-    status = "okay";
-    st,adc-channels = <8>;
-	assigned-resolution-bits = <12>;
-};
-```
-
-**Kernel Configuration** (`linux.config`)
-
-- `CONFIG_REGULATOR`=y: enables the Linux regulator framework, which manages voltage and current regulators in the system.
-- `CONFIG_REGULATOR_FIXED_VOLTAGE`=y: allows the kernel to handle fixed voltage sources such as vref or vdda used by the ADC, ensuring the device tree’s voltage supplies are recognized.
-- `CONFIG_IIO`=y: enables the Industrial I/O (`IIO`) subsystem in the kernel.
-- `CONFIG_STM32_ADC_CORE`=y: provides the low-level driver support that is common across STM32 ADC devices, forming the foundation for specific ADC instances.
-- `CONFIG_STM32_ADC`=y: allows actual use of STM32 ADC hardware, implementing the interface between the hardware and the `IIO` subsystem.
-- `CONFIG_IIO_SYSFS_TRIGGER`=y: this allows you to trigger ADC conversions and read data through the sysfs filesystem, which is how user space tools and manual testing often interact with the ADC.
-
 ### Linux sleep functions
 
 `sleepexample` (Sleep Functions Test Utility) a simple C utility designed to demonstrate and test various Linux sleep functions on embedded systems. It is especially useful for verifying kernel timer behavior and diagnosing issues where sleep functions return prematurely due to missing or misconfigured clocksource drivers.
@@ -619,148 +462,24 @@ Required for specific tests:
 
 - `CONFIG_TIMERFD`=y: needed for timerfd_create() test
 - `CONFIG_EPOLL`=y: needed for epoll_wait() test
-- `CONFIG_EVENTFD`=y: required by epoll for some event handling cases
-- `CONFIG_SIGNALFD`=y: part of the epoll ecosystem, not strictly needed for current code
 - `CONFIG_FUTEX`=y: required by pthread_cond_timedwait() test (POSIX thread waits depend on futexes)
 
 Real-Time Clock (RTC), hardware clock device:
 
 - `CONFIG_RTC_CLASS`=y: enable RTC subsystem support in the Linux kernel
 - `CONFIG_RTC_DRV_STM32`=y: use the STM32-specific hardware RTC driver
-- `CONFIG_RTC_HCTOSYS`=y: at boot, set system time from hardware RTC
-- `CONFIG_RTC_SYSTOHC`=y: periodically or on shutdown, write system time back to RTC
-- `CONFIG_RTC_HCTOSYS_DEVICE`="rtc0": RTC device used to initialize system clock at boot
+- `CONFIG_RTC_HCTOSYS` is not required: `sleepexample` uses `hwclock` explicitly
+- `CONFIG_RTC_SYSTOHC` is not required: `sleepexample` writes the RTC explicitly
 
-Optional but recommended:
+`CONFIG_SYSFS=y` remains enabled because the LED and PWM examples use it.
+Procfs is not required by any packaged example.
 
-- `CONFIG_SYSFS`=y: enables /sys virtual filesystem exposing device and kernel info
-- `CONFIG_PROC_FS`=y: enables /proc virtual filesystem for system info
-- `NO_HZ_IDLE`=n: disables tickless idle; recommended for real-time precision in sleep and timers
+## Debugging a development image
 
-
-## Troubleshooting
-
-This guide provides step-by-step troubleshooting procedures and checks for device initialization issues, driver binding problems, device tree verification, and typical hardware/software misconfigurations on Linux systems, focusing on I2C and SPI buses and related peripherals.
-
-### Pre-requisites
-
-- Kernel configured with debug options enabled.
-- Access to `/sys/kernel/debug`, `/proc/device-tree`, and `/sys/bus/*` interfaces.
-- Basic Linux shell familiarity.
-
-
-### Debugfs and Kernel Debug Interfaces
-
-**Mount debugfs**:
-
-```bash
-mount -t debugfs none /sys/kernel/debug
-ls /sys/kernel/debug
-```
-
-**Check Clocks**:
-
-```bash
-cat /sys/kernel/debug/clk/clk_summary
-cat /sys/kernel/debug/clk/clk_summary | grep <device-name>
-```
-
-**View current pin multiplexing state**:
-
-```bash
-cat /sys/kernel/debug/pinctrl/*/pinmux-pins
-cat /sys/kernel/debug/pinctrl/*/pinmux-pins | grep <device-name>
-```
-
-**Pin controller status and pin assignments**:
-
-```bash
-cat /sys/kernel/debug/pinctrl/<your-device-pinctrl>/
-```
-
-**Check IRQ mapping and usage**:
-
-```bash
-cat /sys/kernel/debug/irq/<irq-number>/irq
-cat /proc/interrupts
-```
-
-**Regulator Status**:
-
-```bash
-cat /sys/class/regulator/regulator*/name
-cat /sys/class/regulator/regulator*/state
-```
-
-### Device Tree Inspection
-
-**Inspect Flattened Device Tree (FDT)**:
-
-```bash
-ls /proc/device-tree/soc
-```
-
-- Nodes correspond to hardware controllers and devices.
-- Each node contains files like `compatible`, `reg`, `status`.
-
-**Verify Device Status**:
-
-```bash
-cat /proc/device-tree/soc/<node>/<device>/status
-```
-
-- `okay` means enabled.
-- `disabled` means ignored by kernel.
-
-**Inspect Compatible Strings**:
-
-```bash
-od -c /proc/device-tree/soc/<node>/<device>/compatible
-```
-
-- Ensure the compatible string matches a kernel driver.
-
-### Device Node and Driver Binding Checks
-
-**Verify Device Files in `/dev`**:
-
-```bash
-ls /dev/
-# Look for i2c-X, spidevX.Y, and other device nodes
-```
-
-**Verify I2C Bus and Devices**:
-
-```bash
-ls /sys/bus/i2c/devices/
-# Look for 0-0041  i2c-0, and other device nodes
-```
-
-Inspect Device Properties:
-
-```bash
-ls -l /sys/bus/i2c/devices/i2c-0/
-ls -l /sys/bus/i2c/devices/0-0041/
-```
-
-- Check for `driver` symlink; absence indicates no driver bound.
-- Check `waiting_for_supplier` file presence — indicates deferred probing due to missing dependencies.
-
-**Verify SPI Devices**:
-```bash
-ls /sys/bus/spi/devices/
-# Look for spi0.0  spi0.1, and other device nodes
-```
-
-Inspect Device Properties:
-
-```bash
-ls -l /sys/bus/spi/devices/spi0.0/driver
-ls -l /sys/bus/spi/devices/spi0.1/driver
-```
-
-- Check for `driver` symlink; absence indicates no driver bound.
-- Check `waiting_for_supplier` file presence — indicates deferred probing due to missing dependencies.
+The production-minimal configuration does not provide kernel logs, procfs, or
+debugfs. For driver development, temporarily enable `CONFIG_PRINTK`,
+`CONFIG_PROC_FS`, and `CONFIG_DEBUG_FS`, and add the corresponding BusyBox
+diagnostic commands. Do not carry those settings into the size-optimized image.
 
 ## References
 
@@ -771,8 +490,6 @@ ls -l /sys/bus/spi/devices/spi0.1/driver
 - [STM32 USART Device Tree Bindings](https://www.kernel.org/doc/Documentation/devicetree/bindings/serial/st%2Cstm32-usart.txt)
 - [RS485 Device Tree Bindings (YAML)](https://www.kernel.org/doc/Documentation/devicetree/bindings/serial/rs485.yaml)
 - [RS485 Driver API Documentation](https://www.kernel.org/doc/Documentation/driver-api/serial/serial-rs485.rst)
-- [STM32 ADC Device Tree Bindings (TXT)](https://www.kernel.org/doc/Documentation/devicetree/bindings/iio/adc/st%2Cstm32-adc.txt)
-- [STM32 ADC Device Tree Bindings (YAML)](https://www.kernel.org/doc/Documentation/devicetree/bindings/iio/adc/st,stm32-adc.yaml)
 
 **Tutorials and Practical Guides**
 

@@ -17,7 +17,7 @@ workspace/
 │   │   ├── linux.config                  ← Custom Linux kernel configuration file
 │   │   ├── busybox.config                ← Custom BusyBox configuration file
 │   │   ├── flash.sh                      ← Flashing script for programming the board
-│   │   ├── rootfs-overlay/               ← Files to overlay on the target root filesystem
+│   │   ├── rootfs-minimal-overlay/       ← Files for the minimal target root filesystem
 │   │   ├── dts/                          ← Device Tree Source files for hardware description
 │   │   └── linux-patches/                ← Kernel patch files and helper scripts
 │   ├── configs/                          ← Buildroot defconfigs
@@ -31,7 +31,7 @@ workspace/
 └── README.md
 ```
 
-## Stage 1: SDK Configuration (Optional, Recommended)
+## Stage 1: SDK Creation (Only When the Saved SDK Is Missing)
 
 Generating the cross-compilation SDK as a standalone artifact is useful when:
 
@@ -46,9 +46,9 @@ Generating the cross-compilation SDK as a standalone artifact is useful when:
    make buildroot
    ```
 
-2. Create the default SDK configuration:
+2. Load the tracked SDK configuration:
    ```bash
-   cd buildroot && make stm32f429_disco_xip_defconfig && cd ..
+   make sdk-configure
    ```
 
 3. Open the Buildroot configuration menu:
@@ -110,9 +110,9 @@ The second stage configures and builds the full root filesystem and Linux image 
    make buildroot
    ```
 
-2. Create the default Buildroot project configuration:
+2. Load the tracked Buildroot project configuration:
    ```bash
-   cd buildroot && make stm32f429_disco_xip_defconfig && cd ..
+   make configure
    ```
 
 3. Open the Buildroot configuration menu:
@@ -196,6 +196,25 @@ git add firmware/board/stm32f429disco/*.config
 git commit -m "Save project and SDK configurations"
 ```
 
+## Clean System Rebuild While Preserving the SDK
+
+The system configuration consumes the existing archive:
+
+```
+buildroot-sdk/arm-buildroot-uclinux-uclibcgnueabi_sdk-buildroot.tar.gz
+```
+
+To delete all generated system output and rebuild without rebuilding or
+modifying that SDK, run inside the devcontainer:
+
+```bash
+make rebuild_all
+```
+
+This validates and hashes the SDK, removes `buildroot/output/`, loads
+`stm32f429disco.defconfig`, builds from scratch, and verifies that the SDK
+checksum is unchanged. The download and ccache directories remain intact.
+
 ## Flashing Firmware
 > **Note**: On Windows + WSL systems, the script `scripts/stlink-powershell.bat` can be used to attach the ST-Link debugger. Run as Administrator and then start devcontainer.
 
@@ -203,7 +222,7 @@ To build and flash the firmware to the STM32F429Discovery board:
 
 ```bash
 make all
-sudo make flash
+make flash
 ```
 
 ## License

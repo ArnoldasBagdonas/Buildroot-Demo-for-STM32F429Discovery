@@ -32,31 +32,16 @@ config BR2_PACKAGE_SLEEPEXAMPLE
       **Required for specific tests**
         - CONFIG_TIMERFD=y                 # Needed for timerfd_create() test
         - CONFIG_EPOLL=y                   # Needed for epoll_wait() test
-        - CONFIG_EVENTFD=y                 # Required by epoll for some event handling cases
-        - CONFIG_SIGNALFD=y                # Not strictly needed for your current code, but 
-                                           # part of epoll ecosystem
         - CONFIG_FUTEX=y                   # Required by pthread_cond_timedwait() test (POSIX
                                            # thread waits depend on futexes)
 
       **Real-Time Clock (RTC), hardware clock device**
         - CONFIG_RTC_CLASS=y               # Enable RTC subsystem support in the Linux kernel
         - CONFIG_RTC_DRV_STM32=y           # Use the STM32-specific hardware RTC driver
-        - CONFIG_RTC_HCTOSYS=y             # At boot, set system time from hardware RTC
-        - CONFIG_RTC_SYSTOHC=y             # Periodically or on shutdown, write system time back to RTC
-        - CONFIG_RTC_HCTOSYS_DEVICE="rtc0" # Which hardware RTC device should be used to initialize
-                                           # the system clock at boot when CONFIG_RTC_HCTOSYS=y is enabled
-      
-      **Optional but recommended:**
-        - CONFIG_SYSFS=y                   # Enables /sys virtual filesystem exposing device
-                                           # and kernel info. Useful for monitoring hardware
-                                           # and kernel state.
-        - CONFIG_PROC_FS=y                 # Enables the /proc virtual filesystem. Many utilities
-                                           # rely on /proc for system info. Recommended to keep
-                                           # enabled for general system observability.
-        - NO_HZ_IDLE=n                     # (tickless idle) disables periodic ticks when system
-                                           # is idle, saving power. For real-time precision in
-                                           # sleep and timers, it is recommended to keep
-                                           # NO_HZ_IDLE disabled (set to 'n').
+        - /dev/rtc0                         # Accessed directly with RTC ioctls
+
+      CONFIG_RTC_HCTOSYS, CONFIG_RTC_SYSTOHC, procfs, and kernel debugging
+      facilities are not required by this example.
 
       Timers in embedded Linux?
 

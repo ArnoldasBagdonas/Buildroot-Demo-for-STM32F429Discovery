@@ -1,0 +1,4 @@
+#!/bin/sh
+mount -t sysfs sysfs /sys
+export PATH="/bin:/sbin:/usr/bin:/usr/sbin" PS1='# '
+exec /bin/sh -i
