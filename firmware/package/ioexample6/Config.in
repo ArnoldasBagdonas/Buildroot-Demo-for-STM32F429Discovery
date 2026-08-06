@@ -1,12 +1,16 @@
 config BR2_PACKAGE_IOEXAMPLE6
     bool "Example6: PWM Interactive Demo (TIM3_CH1, PB4)"
+    select BR2_PACKAGE_PERIPHERY
     help
       This package provides a simple utility demonstrating the usage of
       the Linux PWM sysfs interface on an STM32F4-based board.
 
-      It enables PWM output on chip0, channel0 (TIM3_CH1, PB4) and interactively
-      adjusts the duty cycle in steps (25%, 50%, 75%, 100%) while waiting
-      for user input between changes.
+      It enables PWM output on chip0, channel0 (TIM3_CH1, PB4). The user can
+      enter any integer duty cycle from 0 to 100 percent, or q to quit.
+
+      Connect an external LED in series with a 330-680 ohm resistor between
+      PB4 and GND. The onboard LEDs on PG13 and PG14 do not expose timer PWM
+      alternate functions on STM32F429.
 
       The example shows:
         - Opening and configuring a PWM channel

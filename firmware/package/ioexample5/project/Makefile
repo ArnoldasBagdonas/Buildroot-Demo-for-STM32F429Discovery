@@ -13,17 +13,18 @@ SRC_DIR = src
 BIN_DIR = bin
 OBJ_DIR = $(BIN_DIR)/obj
 
-# Include directory for headers
-INCLUDES = -I./include
+# Additional preprocessor flags may be supplied by the build environment.
+CPPFLAGS ?=
 
 # Compile only the implementation used by this example.
-SRC := $(SRC_DIR)/main.c $(SRC_DIR)/periphery/mmio.c
+SRC := $(SRC_DIR)/main.c
 OBJ := $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRC))
 
 # Compiler settings
 CC      ?= gcc
 CFLAGS  ?= $(MINISIZE_FLAGS)
 LDFLAGS ?= $(CFLAGS) -Wl,--gc-sections
+LDLIBS  ?= -lperiphery
 
 # Default target
 all: $(BIN_DIR)/$(TARGET) copy-config
@@ -31,12 +32,12 @@ all: $(BIN_DIR)/$(TARGET) copy-config
 # Link object files into target executable
 $(BIN_DIR)/$(TARGET): $(OBJ)
 	@mkdir -p $(BIN_DIR)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(CC) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 # Compile source files into object files
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 # Configuration-based builds
 debug: CFLAGS := $(DEBUG_FLAGS)

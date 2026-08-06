@@ -241,6 +241,16 @@ Not needed for /dev/mem access.
 
 This example configures `TIM3_CH1` on `PB4` for PWM output and allows user-space control (e.g., via the `ioexample6` application).
 
+The onboard PG13 and PG14 LEDs cannot be driven by timer alternate functions
+on STM32F429. To observe duty cycle as brightness, connect an external LED as:
+
+```text
+PB4 (TIM3_CH1) -> 330-680 ohm resistor -> LED anode
+LED cathode     -> GND
+```
+
+Do not connect an LED without the series resistor.
+
 **Test Manually via Sysfs**:
 
 After boot:
@@ -295,6 +305,7 @@ echo 0 > unexport
 **Kernel Configuration** (`linux.config`)
 
 - `CONFIG_PWM`=y: enables generic Pulse Width Modulation support in the kernel.
+- `CONFIG_MFD_STM32_TIMERS`=y: enables the STM32 timer parent driver required by the STM32 PWM driver.
 - `CONFIG_PWM_STM32`=y: STM32-specific PWM driver support for timers used as PWM controllers.
 - `CONFIG_PWM_SYSFS`=y: provides sysfs interface under /sys/class/pwm for user-space control of PWM devices.
 - `CONFIG_SYSFS`=y: enables the sysfs pseudo-filesystem exposing kernel objects and device attributes to user-space.

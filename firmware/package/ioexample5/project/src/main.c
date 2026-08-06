@@ -123,7 +123,7 @@ static unsigned long get_sysclk_freq_hz(void)
  * @param argv Argument values (unused).
  * @return int 0 on success, non-zero on failure.
  */
-int main(int argc, char *argv[])
+int main(void)
 {
     mmio_t *mmio_rcc = mmio_new();
     mmio_open(mmio_rcc, RCC_BASE, sizeof(RCC_TypeDef));

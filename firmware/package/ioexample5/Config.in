@@ -1,5 +1,6 @@
 config BR2_PACKAGE_IOEXAMPLE5
     bool "Example5: RCC Frequency Reader"
+    select BR2_PACKAGE_PERIPHERY
     help
       This package provides a simple utility that reads the STM32F4 RCC
       (Reset and Clock Control) registers directly from `/dev/mem` to

@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
             cleanup(EXIT_SUCCESS);
         }
 
-        int len = serial_write(serial, message, strlen(message));
+        int len = serial_write(serial, (const uint8_t *)message, strlen(message));
         if (len < 0)
         {
             fprintf(stderr, "serial_write(): %s\n", serial_errmsg(serial));
