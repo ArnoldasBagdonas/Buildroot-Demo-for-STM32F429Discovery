@@ -73,7 +73,8 @@ In `menuconfig`, press `/`, enter the package name (for example,
 `BR2_PACKAGE_IOEXAMPLE1`), and press Enter. Follow the displayed location,
 enable the package with the Space key, then choose **Save** and **Exit**.
 
-Enable only one example symbol for each test:
+Enable only one example symbol for each test. The optional `displaydebug`
+diagnostic package may be selected in addition to any one example:
 
 | Package | `menuconfig` symbol | Program on the board | Purpose |
 |---|---|---|---|
@@ -89,11 +90,12 @@ Enable only one example symbol for each test:
 | `ioexample7` | `BR2_PACKAGE_IOEXAMPLE7` | `ioexample7` | UART test, defaulting to `/dev/ttySTM1` |
 | `ioexample8` | `BR2_PACKAGE_IOEXAMPLE8` | `ioexample8` | RS-485 test, defaulting to `/dev/ttySTM1` |
 | `displayexample` | `BR2_PACKAGE_DISPLAYEXAMPLE` | `displayexample` | LCD slideshow testing PNG, JPEG, GIF, and BMP decoding |
+| `displaydebug` | `BR2_PACKAGE_DISPLAYDEBUG` | `displaydebug` | Optional reusable kernel and peripheral diagnostics |
 
 Optional: confirm the selection before building:
 
 ```bash
-grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|DISPLAYEXAMPLE|PERIPHERY)=y$' buildroot/.config
+grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|DISPLAY(EXAMPLE|DEBUG)|PERIPHERY)=y$' buildroot/.config
 ```
 
 Examples 3 through 7 automatically select `BR2_PACKAGE_PERIPHERY`. It is an

@@ -7,7 +7,10 @@ JPEG, and GIF test cards. `fbv` also accepts BMP files without another decoder
 library.
 
 The core display fragment retains procfs because Linux 6.1 framebuffer
-registration needs `/proc/fb` in order to create `/dev/fb0`.
+registration needs `/proc/fb` in order to create `/dev/fb0`. Extra diagnostic
+features are provided by the independent `BR2_PACKAGE_DISPLAYDEBUG` package.
+It can be selected beside this or any other example and disabled again for a
+smaller normal image.
 
 ## Required configuration and why
 
@@ -66,6 +69,10 @@ before starting `fbv`. This first modeset initializes the panel, enables LTDC
 scanout, and turns on the runtime-managed LCD clock. It then presents the
 bundled PNG, JPEG, and GIF files as an interactive slideshow. BMP decoding is
 available from fbv without another image library.
+
+The optional `BR2_PACKAGE_DISPLAYDEBUG` selection is intentionally independent.
+Its debugfs, logging, diagnostic applets, and `displaydebug` command are not
+part of the normal display image.
 
 ## Build and run
 
@@ -128,6 +135,100 @@ ST-LINK/V2-B may instead expose USART1 through its ST-LINK virtual COM port.
 Only the separate USART3 example port is disabled in the base and display
 images.
 
+## Debugging with the optional displaydebug package
+
+Select `BR2_PACKAGE_DISPLAYDEBUG` in addition to this example before building.
+It conditionally enables debugfs, timestamped kernel logging, a 16 KiB kernel
+log buffer, and reusable BusyBox diagnostic applets. These features and the
+`displaydebug` command are absent from images where the package is disabled.
+
+Long pasted commands may lose characters on the serial connection. In GNU
+Screen, press `Ctrl-A`, then `:`, enter `slowpaste 5`, and submit it before
+pasting a command block. Alternatively, enter each diagnostic command
+separately and wait for the shell prompt.
+
+First check the framebuffer and run the viewer:
+
+```sh
+ls -l /dev/fb0
+ls -l /sys/class/drm /sys/class/graphics 2>&1
+displayexample
+```
+
+Collect a single report of system information, interrupts, the clock tree,
+device nodes, kernel messages, and (when LTDC is present) display registers:
+
+```sh
+displaydebug
+```
+
+Expected results are `/dev/fb0`, at least one DRM `card*` entry, and
+`/sys/class/graphics/fb0`.
+
+Verify that the display-specific DTB was booted:
+
+```sh
+cat /sys/firmware/devicetree/base/soc/*40016800*/status
+cat /sys/firmware/devicetree/base/soc/*40004800*/status
+find /sys/firmware/devicetree/base/soc -name 'display@1'
+```
+
+The expected LTDC status is `okay`, USART3 status is `disabled`, and `find`
+must print the SPI `display@1` node.
+
+Check driver binding:
+
+```sh
+ls -l /sys/bus/spi/devices
+ls -l /sys/bus/spi/devices/spi0.1/driver 2>&1
+ls -l /sys/bus/spi/drivers/panel-ilitek-ili9341 2>&1
+ls -l /sys/bus/platform/devices/40016800.display-controller/driver 2>&1
+ls -l /sys/bus/platform/drivers/stm32-display 2>&1
+```
+
+Interpret the results as follows:
+
+- A missing `display@1` node means the minimal DTB was flashed instead of the
+  display DTB.
+- A present `spi0.1` without a `driver` link means the ILI9341 panel driver did
+  not bind.
+- `spi0.1` bound to `panel-ilitek-ili9341`, but no driver link on
+  `40016800.display-controller`, means LTDC failed to probe. Check that no UART
+  example was combined with the display example.
+- Both drivers bound but no `/dev/fb0` indicates a DRM framebuffer-emulation or
+  memory-allocation failure.
+- `Unable to create device for framebuffer 0; errno = -19` followed by
+  `fb0: stmdrmfb frame buffer device` means Linux allocated the framebuffer but
+  `fbmem_init()` did not create the graphics class. On Linux 6.1 this happens
+  when `CONFIG_PROC_FS` is disabled: creation of `/proc/fb` fails first. The
+  display-only kernel fragment therefore enables procfs; the minimal base
+  kernel still excludes it.
+
+In that case, collect the relevant kernel messages:
+
+```sh
+dmesg | grep -Ei 'drm|ltdc|ili9341|framebuffer|fb0|pinctrl|memory'
+```
+
+If the filtered output is empty, save the complete log instead:
+
+```sh
+dmesg
+```
+
+When reporting a failure, include all of the following in one message:
+
+```sh
+ls -l /dev/fb* /dev/dri 2>&1
+ls -l /sys/class/drm /sys/class/graphics 2>&1
+ls -l /sys/bus/spi/devices/spi0.1/driver 2>&1
+ls -l /sys/bus/platform/devices/*40016800*/driver 2>&1
+dmesg | grep -Ei 'drm|ltdc|ili9341|framebuffer|fb0|pinctrl|memory'
+```
+
+The slideshow script avoids combined `set -eu`, which this project's minimal
+BusyBox `hush` rejects.
+
 ## Rebuild and retest loop
 
 Use a clean rebuild after changing the display DTS, Linux or BusyBox fragments,
@@ -144,8 +245,10 @@ make build_all
 make flash
 ```
 
-In `make menuconfig`, select `displayexample`. Do not select `ioexample7` or
-`ioexample8`; the build deliberately rejects that PB10/PB11 conflict.
+In `make menuconfig`, select `displayexample` and the independent
+`displaydebug` package while diagnosing the LCD. Do not select `ioexample7` or
+`ioexample8`; the build deliberately rejects that PB10/PB11 conflict. Disable
+`displaydebug` for the final image-size check.
 
 Check these milestones during every iteration:
 
@@ -155,12 +258,14 @@ Check these milestones during every iteration:
 3. The new BusyBox build timestamp must appear after reset.
 4. Both panel and LTDC `driver` links must exist.
 5. `/sys/class/drm/card0` and `/dev/fb0` must exist.
-6. Run `displayexample`; verify that the bundled PNG, JPEG, and GIF cards are
+6. Run `displaydebug`; after display activation, verify that `lcd-tft` is
+   enabled, LTDC registers are nonzero, and LTDC interrupt counts rise.
+7. Run `displayexample`; verify that the bundled PNG, JPEG, and GIF cards are
    visible, navigation keys work, and `q` exits.
 
-If any milestone fails, stop there, record the serial output, fix that layer,
-and repeat the complete clean sequence. `make flash` alone never rebuilds
-changed sources.
+If any milestone fails, stop there, collect the diagnostic block above, fix
+that layer, and repeat the complete clean sequence. `make flash` alone never
+rebuilds changed sources.
 
 During a quick developer iteration, a changed kernel fragment can be forced
 through Kconfig without rebuilding host tools:

@@ -17,3 +17,6 @@ config BR2_PACKAGE_DISPLAYEXAMPLE
 	  When this package is not selected, the display drivers, fbv, image
 	  decoder libraries, slideshow script, sample images, and display
 	  device-tree nodes are all excluded from the firmware images.
+
+	  The independent BR2_PACKAGE_DISPLAYDEBUG package may be selected beside
+	  this or any other example when reusable diagnostics are needed.

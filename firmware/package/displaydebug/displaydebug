@@ -1,0 +1,84 @@
+#!/bin/sh
+
+# Keep reusable diagnostics in one target-side command. Pasting a long command
+# through the STM32 USART can overrun its small receive buffer and corrupt
+# shell input.
+
+mount -t proc proc /proc 2>/dev/null || true
+mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null || true
+
+read_register()
+{
+	echo -n "$1 ($2): "
+	/sbin/devmem "$2" 32
+}
+
+echo "=== Interrupts ==="
+cat /proc/interrupts 2>&1
+
+echo "=== System ==="
+cat /proc/version 2>&1
+echo -n "Command line: "
+cat /proc/cmdline 2>&1
+echo "Memory:"
+grep -E 'MemTotal|MemFree|Buffers|Cached' /proc/meminfo 2>&1
+
+echo "=== Device nodes ==="
+ls -l /dev 2>&1
+
+echo "=== Clock summary ==="
+if [ -r /sys/kernel/debug/clk/clk_summary ]; then
+	cat /sys/kernel/debug/clk/clk_summary
+else
+	echo "clock summary unavailable"
+fi
+
+echo "=== Platform devices ==="
+ls -l /sys/bus/platform/devices 2>&1
+
+if [ -L /sys/bus/platform/devices/40016800.display-controller/driver ]; then
+	echo "=== STM32F429 display diagnostics ==="
+	if [ -r /sys/kernel/debug/clk/clk_summary ]; then
+		grep -E 'clock|lcd-tft|pllsai' /sys/kernel/debug/clk/clk_summary
+	fi
+
+	echo "RCC registers:"
+	read_register RCC_CR       0x40023800
+	read_register PLLSAICFGR   0x40023888
+	read_register DCKCFGR      0x4002388c
+	read_register APB2ENR      0x40023844
+
+	echo "LTDC registers:"
+	read_register SSCR         0x40016808
+	read_register BPCR         0x4001680c
+	read_register AWCR         0x40016810
+	read_register TWCR         0x40016814
+	read_register GCR          0x40016818
+	read_register SRCR         0x40016824
+	read_register IER          0x40016834
+	read_register ISR          0x40016838
+	read_register LIPCR        0x40016840
+	read_register CPSR_1       0x40016844
+	read_register CPSR_2       0x40016844
+	read_register CPSR_3       0x40016844
+	read_register CPSR_4       0x40016844
+	read_register CPSR_5       0x40016844
+	read_register CDSR         0x40016848
+
+	echo "LTDC layer 1 registers:"
+	read_register L1CR         0x40016884
+	read_register L1WHPCR      0x40016888
+	read_register L1WVPCR      0x4001688c
+	read_register L1PFCR       0x40016894
+	read_register L1CACR       0x40016898
+	read_register L1BFCR       0x400168a0
+	read_register L1CFBAR      0x400168ac
+	read_register L1CFBLR      0x400168b0
+	read_register L1CFBLNR     0x400168b4
+else
+	echo "=== STM32F429 display diagnostics ==="
+	echo "LTDC driver is not present; display-specific register reads skipped"
+fi
+
+echo "=== Kernel messages ==="
+dmesg 2>&1
