@@ -1,0 +1,9 @@
+/*
+ * USART3 variant built only for ioexample7 and ioexample8.
+ * The base board keeps USART3 disabled because PB10/PB11 conflict with LTDC.
+ */
+#include "stm32f429disco-custom.dts"
+
+&usart3 {
+	status = "okay";
+};

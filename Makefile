@@ -26,7 +26,11 @@ FLASH_SCRIPT        := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/flash.sh
 MKDIR_P  := mkdir -p
 RM_F     := rm -f
 ECHO     := echo
-MAKE_BR  := $(MAKE) -C $(BUILDROOT_DIR)
+# Always override the path cached in buildroot/.config. That configuration may
+# have been generated from another checkout location (for example, on the host
+# instead of /workspace in the devcontainer), and Buildroot validates the
+# cached BR2_EXTERNAL path before it can even run distclean.
+MAKE_BR  := $(MAKE) -C $(BUILDROOT_DIR) BR2_EXTERNAL="$(BR2_EXTERNAL_DIR)"
 
 # -------------------------------------------------------------
 # Default target
@@ -43,7 +47,10 @@ buildroot:
 		$(ECHO) "==> Cloning Buildroot ($(BUILDROOT_VERSION))..."; \
 		git clone --branch $(BUILDROOT_VERSION) --depth 1 https://github.com/buildroot/buildroot.git $(BUILDROOT_DIR); \
 	else \
-		CURRENT_HASH=$$(git -C $(BUILDROOT_DIR) rev-parse HEAD); \
+		if ! CURRENT_HASH=$$(git -c safe.directory="$(abspath $(BUILDROOT_DIR))" -C $(BUILDROOT_DIR) rev-parse HEAD); then \
+			$(ECHO) "✖ ERROR: Could not inspect the existing Buildroot checkout." >&2; \
+			exit 1; \
+		fi; \
 		if [ "$$CURRENT_HASH" != "$(BUILDROOT_VERSION_COMMIT_HASH)" ]; then \
 			$(ECHO) "==> Buildroot present but incorrect commit ($$CURRENT_HASH ≠ $(BUILDROOT_VERSION_COMMIT_HASH)). Re-cloning..."; \
 			rm -rf $(BUILDROOT_DIR); \
@@ -90,9 +97,18 @@ sdk-configure: buildroot
 # -------------------------------------------------------------
 # Build and flash targets
 # -------------------------------------------------------------
-.PHONY: build_all rebuild_all distclean
-build_all: sdk
+.PHONY: build_all rebuild_all distclean check-example-conflicts
+build_all: sdk check-example-conflicts
 	@$(MAKE_BR)
+
+check-example-conflicts:
+	@if test -f "$(BUILDROOT_DIR)/.config" && \
+		grep -q '^BR2_PACKAGE_DISPLAYEXAMPLE=y$$' "$(BUILDROOT_DIR)/.config" && \
+		grep -Eq '^BR2_PACKAGE_IOEXAMPLE(7|8)=y$$' "$(BUILDROOT_DIR)/.config"; then \
+		$(ECHO) "ERROR: displayexample conflicts with ioexample7/ioexample8." >&2; \
+		$(ECHO) "PB10/PB11 cannot be used by LTDC and USART3 at the same time." >&2; \
+		exit 1; \
+	fi
 
 rebuild_all: buildroot
 	@set -eu; \
@@ -126,7 +142,7 @@ distclean:
 	@$(MAKE_BR) distclean
 
 .PHONY: flash
-flash:
+flash: check-example-conflicts
 	@bash $(FLASH_SCRIPT) $(BUILDROOT_DIR)/output $(BOARD_NAME)
 
 # -------------------------------------------------------------

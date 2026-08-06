@@ -1,6 +1,6 @@
 # STM32F429Discovery DTS and Peripheral Configuration Guide
 
-This guide provides step-by-step instructions for configuring **Device Tree Source (DTS)** files and Linux kernel settings for `I2C`, `SPI`, `PWM`, and `Serial` interfaces on the `STM32F429I-DISC1` board.
+This guide provides step-by-step instructions for configuring **Device Tree Source (DTS)** files and Linux kernel settings for `I2C`, `SPI`, `PWM`, `Display`, and `Serial` interfaces on the `STM32F429I-DISC1` board.
 
 The tracked configuration is production-minimal. Kernel logging, procfs, and
 debugfs are intentionally disabled to reduce the XIP image.
@@ -15,6 +15,7 @@ debugfs are intentionally disabled to reduce the XIP image.
     - [GPIO](#gpio)
     - [I2C](#i2c)
     - [SPI](#spi)
+    - [Display](#display)
     - [MEM](#mem)
     - [PWM](#pwm)
     - [Serial (USART/RS-485)](#serial)
@@ -180,7 +181,9 @@ The minimal profile exposes the onboard `L3GD20` gyroscope on `SPI5` chip select
   
   - If `"st,l3gd20-gyro"` is present and supported, the kernel will automatically bind to the `L3GD20` driver. Otherwise, `/dev/spidev*` will be exposed for testing or debugging.
 
-The LCD/display stack and its second chip select are not enabled because no package example uses them.
+The base device tree keeps the LCD and its second chip select disabled. Selecting
+`BR2_PACKAGE_DISPLAYEXAMPLE` builds the separate
+`stm32f429disco-display.dtb`; `make flash` then selects that DTB automatically.
 
 **Device Tree** (`stm32f429disco-custom.dts`)
 
@@ -213,6 +216,25 @@ The LCD/display stack and its second chip select are not enabled because no pack
 - `CONFIG_SPI`=y: enables SPI bus support for synchronous serial communication.
 - `CONFIG_SPI_STM32`=y: provides the STM32F4 SPI controller driver.
 - `CONFIG_SPI_SPIDEV`=y: exposes spidev character devices (/dev/spidevX.Y) for user-space SPI device access.
+
+### Display
+
+The opt-in `displayexample` package enables the STM32 LTDC, the ILI9341 panel
+on SPI5 chip select 1, DRM framebuffer emulation, `fbv`, and its PNG/JPEG/GIF
+decoders. `fbv` also retains its built-in BMP support without adding a decoder
+library. Its Linux settings live in `linux-display.config` rather than the
+minimal `linux.config`.
+
+The base DTS keeps USART3 disabled because its PB10/PB11 signals conflict with
+the LCD's LTDC_G4/LTDC_G5 signals. The display DTS includes that base and adds
+only the LCD nodes. The package makefile adds the display DTS to the Linux
+build only while the package is selected. Consequently, a normal build
+contains neither the display nodes nor the display kernel and root-filesystem
+payload.
+
+On a display-example image, `/dev/fb0` is the compatibility framebuffer used
+by the slideshow script. See `firmware/package/readme.md` for the complete
+selection, build, flash, and manual test procedure.
 
 ### MEM
 
@@ -322,6 +344,14 @@ Example user-space apps:
 - `ioexample7` → UART
 - `ioexample8` → RS-485
 
+USART3 is disabled in `stm32f429disco-custom.dts`. Selecting either UART
+example conditionally builds `stm32f429disco-usart3.dtb`, which overrides the
+node to `status = "okay"`; `make flash` selects that DTB automatically. The
+USART1 serial console remains enabled in every image.
+
+USART3 cannot be combined with `displayexample`: PB10/PB11 are also LCD data
+pins. The build and flash targets report an error if both are selected.
+
 **Test Manually**:
 
 After boot:
@@ -370,7 +400,8 @@ Parity/Stop Bits Quick Reference:
 
 If your driver supports RS485 mode, configure TX and RX delay times via Device Tree or configure RS485 parameters dynamically (user space app).
 
-**Device Tree** (`stm32f429disco-custom.dts`)
+**Device Trees** (`stm32f429disco-custom.dts` and
+`stm32f429disco-usart3.dts`)
 
 > **Note**: if the DTS does not define a **serial alias** for `usart3`, the STM32 USART driver will not assign a valid device node (e.g., `/dev/ttySTM1`, `/dev/ttySTM2`).
 
@@ -385,10 +416,20 @@ RS-485 with DE GPIO control:
 &usart3 {
     pinctrl-names = "default";
     pinctrl-0 = <&usart3_pins_a>;
-	status = "okay";
+	status = "disabled";
 
 	/* ioexample8 enables RS-485 dynamically; use PD12 for DE control. */
 	rts-gpios = <&gpiod 12 GPIO_ACTIVE_HIGH>;
+};
+```
+
+The UART-example variant enables the inherited node:
+
+```dts
+#include "stm32f429disco-custom.dts"
+
+&usart3 {
+	status = "okay";
 };
 ```
 

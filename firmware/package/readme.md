@@ -73,7 +73,7 @@ In `menuconfig`, press `/`, enter the package name (for example,
 `BR2_PACKAGE_IOEXAMPLE1`), and press Enter. Follow the displayed location,
 enable the package with the Space key, then choose **Save** and **Exit**.
 
-Enable only one of these symbols for each test:
+Enable only one example symbol for each test:
 
 | Package | `menuconfig` symbol | Program on the board | Purpose |
 |---|---|---|---|
@@ -88,15 +88,23 @@ Enable only one of these symbols for each test:
 | `ioexample6` | `BR2_PACKAGE_IOEXAMPLE6` | `ioexample6` | Interactive PWM test on TIM3_CH1/PB4 |
 | `ioexample7` | `BR2_PACKAGE_IOEXAMPLE7` | `ioexample7` | UART test, defaulting to `/dev/ttySTM1` |
 | `ioexample8` | `BR2_PACKAGE_IOEXAMPLE8` | `ioexample8` | RS-485 test, defaulting to `/dev/ttySTM1` |
+| `displayexample` | `BR2_PACKAGE_DISPLAYEXAMPLE` | `displayexample` | LCD slideshow testing PNG, JPEG, GIF, and BMP decoding |
 
 Optional: confirm the selection before building:
 
 ```bash
-grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|PERIPHERY)=y$' buildroot/.config
+grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|DISPLAYEXAMPLE|PERIPHERY)=y$' buildroot/.config
 ```
 
 Examples 3 through 7 automatically select `BR2_PACKAGE_PERIPHERY`. It is an
 internal build dependency, so you only need to select the example itself.
+
+The base DTB keeps USART3 disabled. Selecting `ioexample7` or `ioexample8`
+automatically builds and flashes `stm32f429disco-usart3.dtb`; the USART1
+ST-Link serial console remains available in every image. Do not combine either
+UART example with `displayexample`, because USART3 and LTDC share PB10/PB11.
+`make build_all` and `make flash` stop with an explicit error if this conflict
+is selected.
 
 ### 4. Build the flashable firmware
 
@@ -138,6 +146,56 @@ ioexample7 /dev/ttySTM1
 ioexample8 /dev/ttySTM1
 ioexample6 0 0
 ```
+
+For the display example, run:
+
+```sh
+displayexample
+```
+
+The LCD remains blank at the serial shell until this command starts the
+viewer. Package-specific diagnostics are documented in
+`firmware/package/displayexample/readme.md`.
+
+It displays the bundled 240x320 PNG, JPEG, and GIF test cards once, waiting
+three seconds between images. Press `q` to quit, Space or Enter to advance, or
+`<`/`>` to move backward/forward. An integer delay and an alternative image
+directory are optional:
+
+```sh
+displayexample 5
+displayexample 2 /path/to/my/images
+```
+
+The alternative directory may also contain BMP files. BMP decoding is built
+into `fbv`, so it does not select another image library. A BMP test card is not
+bundled because its uncompressed pixels would consume unnecessary flash.
+
+The script uses BusyBox `/bin/sh` syntax rather than requiring GNU Bash, so
+selecting the example does not add a Bash interpreter to the image. Check the
+display device and bundled files with:
+
+```sh
+ls -l /dev/fb0
+ls -l /usr/share/displayexample
+```
+
+Selecting only `BR2_PACKAGE_DISPLAYEXAMPLE` automatically enables the Linux
+DRM/LTDC/ILI9341 framebuffer configuration, builds the display-specific DTB,
+and selects `fbv` plus PNG, JPEG, and GIF decoder support. `make flash` reads
+`buildroot/.config` and flashes that DTB automatically. Do not configure
+Linux or BusyBox manually.
+
+When the display example is not selected, its kernel fragment is not applied,
+the display DTB is not built or flashed, and `fbv`, the three decoder
+libraries, the shell script, and the test images are absent from the root
+filesystem. The normal minimal image therefore pays no display-example size
+cost.
+
+The complete clean rebuild, flash, serial-paste, driver-binding, kernel-log,
+and retest procedure is documented in
+[`displayexample/readme.md`](displayexample/readme.md). Follow that loop until
+both `/dev/fb0` and the slideshow have been verified on the board.
 
 For `ioexample6`, connect an external LED to the TIM3 channel 1 output:
 

@@ -1,0 +1,19 @@
+config BR2_PACKAGE_DISPLAYEXAMPLE
+	bool "Display example: PNG/JPEG/GIF/BMP slideshow"
+	select BR2_PACKAGE_FBV
+	select BR2_PACKAGE_FBV_PNG
+	select BR2_PACKAGE_FBV_JPEG
+	select BR2_PACKAGE_FBV_GIF
+	help
+	  Enable the STM32F429Discovery LCD and install a small slideshow
+	  example. The example uses fbv with PNG, JPEG, and GIF support and
+	  includes one 240x320 test image in each format. fbv's built-in BMP
+	  support is also available without another decoder library.
+
+	  Selecting this package also applies the required Linux DRM/fbdev
+	  configuration fragment and builds a display-enabled device tree.
+	  The flash script automatically selects that device tree.
+
+	  When this package is not selected, the display drivers, fbv, image
+	  decoder libraries, slideshow script, sample images, and display
+	  device-tree nodes are all excluded from the firmware images.

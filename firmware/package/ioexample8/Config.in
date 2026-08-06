@@ -33,3 +33,6 @@ config BR2_PACKAGE_IOEXAMPLE8
           - ~SER_RS485_RTS_AFTER_SEND
 
       This demo is useful for verifying UART/RS-485 wiring and behavior.
+      Selecting it builds and flashes the USART3-enabled board device tree.
+      It cannot be combined with displayexample because USART3 and LTDC
+      share PB10/PB11.

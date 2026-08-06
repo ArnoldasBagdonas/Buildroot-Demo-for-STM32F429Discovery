@@ -23,6 +23,7 @@
 
 	aliases {
 		serial0 = &usart1;
+		/* Reserve ttySTM1 for the conditional USART3 example DTB. */
 		serial1 = &usart3;
 	};
 
@@ -108,7 +109,7 @@
 &usart3 {
     pinctrl-0 = <&usart3_pins_a>;
 	pinctrl-names = "default";
-	status = "okay";
+	status = "disabled";
 
 	/* ioexample8 enables RS-485 dynamically; use PD12 for DE control. */
 	rts-gpios = <&gpiod 12 GPIO_ACTIVE_HIGH>;

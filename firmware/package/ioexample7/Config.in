@@ -17,3 +17,7 @@ config BR2_PACKAGE_IOEXAMPLE7
 
       Dependencies:
         https://github.com/vsergeev/c-periphery
+
+      Selecting this example builds and flashes the USART3-enabled board
+      device tree. It cannot be combined with displayexample because USART3
+      and LTDC share PB10/PB11.
