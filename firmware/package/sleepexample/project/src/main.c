@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <sys/timerfd.h>
 #include <fcntl.h>
+#include <stdbool.h>
 
 static const uint64_t SLEEP_TIME_US = 5500000ULL;
 
@@ -24,20 +25,36 @@ typedef struct
     struct timespec mono; // clock_gettime(CLOCK_MONOTONIC, &mono)
     struct timespec real; // clock_gettime(CLOCK_REALTIME, &real)
     time_t time;          // time(&time)
+    bool mono_valid;
+    bool real_valid;
+    bool time_valid;
 } custom_time_t;
 
 // Print elapsed time helper
 void print_elapsed(custom_time_t start, custom_time_t end)
 {
-    double end_mono = (double)(end.mono.tv_sec) + (double)(end.mono.tv_nsec) / 1e9;
-    double start_mono = (double)(start.mono.tv_sec) + (double)(start.mono.tv_nsec) / 1e9;
+    if (start.mono_valid && end.mono_valid) {
+        double end_mono = (double)(end.mono.tv_sec) + (double)(end.mono.tv_nsec) / 1e9;
+        double start_mono = (double)(start.mono.tv_sec) + (double)(start.mono.tv_nsec) / 1e9;
 
-    double end_real = (double)(end.real.tv_sec) + (double)(end.real.tv_nsec) / 1e9;
-    double start_real = (double)(start.real.tv_sec) + (double)(start.real.tv_nsec) / 1e9;
+        printf("Elapsed (MONOTONIC): %.6f seconds\n", end_mono - start_mono);
+    } else {
+        printf("Elapsed (MONOTONIC): unavailable\n");
+    }
 
-    printf("Elapsed (MONOTONIC): %.6f seconds\n", end_mono - start_mono);
-    printf("Elapsed (REALTIME):  %.6f seconds\n", end_real - start_real);
-    printf("Elapsed (time):      %.6f seconds\n", difftime(end.time, start.time));
+    if (start.real_valid && end.real_valid) {
+        double end_real = (double)(end.real.tv_sec) + (double)(end.real.tv_nsec) / 1e9;
+        double start_real = (double)(start.real.tv_sec) + (double)(start.real.tv_nsec) / 1e9;
+
+        printf("Elapsed (REALTIME):  %.6f seconds\n", end_real - start_real);
+    } else {
+        printf("Elapsed (REALTIME):  unavailable\n");
+    }
+
+    if (start.time_valid && end.time_valid)
+        printf("Elapsed (time):      %.6f seconds\n", difftime(end.time, start.time));
+    else
+        printf("Elapsed (time):      unavailable\n");
 }
 
 // Print current time
@@ -55,16 +72,23 @@ void capture_timestamp(custom_time_t *ts)
     if (!ts)
         return;
 
+    memset(ts, 0, sizeof(*ts));
     print_current_time();
 
     if (clock_gettime(CLOCK_MONOTONIC, &ts->mono) != 0)
         printf("clock_gettime(CLOCK_MONOTONIC) failed: %s\n", strerror(errno));
+    else
+        ts->mono_valid = true;
 
     if (clock_gettime(CLOCK_REALTIME, &ts->real) != 0)
         printf("clock_gettime(CLOCK_REALTIME) failed: %s\n", strerror(errno));
+    else
+        ts->real_valid = true;
 
     if (time(&ts->time) == ((time_t)-1))
         printf("time() failed: %s\n", strerror(errno));
+    else
+        ts->time_valid = true;
 }
 
 void test_sleep()
@@ -158,6 +182,7 @@ void test_poll()
 void test_epoll()
 {
     printf("=== Testing epoll_wait() ===\n");
+    struct epoll_event event;
     int epfd = epoll_create1(0);
     if (epfd == -1)
     {
@@ -166,7 +191,7 @@ void test_epoll()
     }
     custom_time_t start, end;
     capture_timestamp(&start);
-    int ret = epoll_wait(epfd, NULL, 0, SLEEP_TIME_US / 1000);
+    int ret = epoll_wait(epfd, &event, 1, SLEEP_TIME_US / 1000);
     if (ret < 0)
         printf("epoll_wait failed: %s\n", strerror(errno));
     capture_timestamp(&end);
@@ -203,8 +228,13 @@ void test_pthread_cond_timedwait()
     if (pthread_condattr_init(&attr) != 0)
         printf("pthread_condattr_init failed: %s\n", strerror(errno));
 
-    if (pthread_condattr_setclock(&attr, CLOCK_MONOTONIC) != 0)
-        printf("pthread_condattr_setclock failed: %s\n", strerror(errno));
+    clockid_t condition_clock = CLOCK_MONOTONIC;
+    int ret = pthread_condattr_setclock(&attr, condition_clock);
+    if (ret != 0) {
+        printf("pthread_condattr_setclock(CLOCK_MONOTONIC) unavailable: %s; using CLOCK_REALTIME\n",
+               strerror(ret));
+        condition_clock = CLOCK_REALTIME;
+    }
 
     if (pthread_cond_init(&cond, &attr) != 0)
         printf("pthread_cond_init failed: %s\n", strerror(errno));
@@ -214,7 +244,7 @@ void test_pthread_cond_timedwait()
     pthread_mutex_lock(&mutex);
 
     struct timespec future;
-    if (clock_gettime(CLOCK_MONOTONIC, &future) != 0)
+    if (clock_gettime(condition_clock, &future) != 0)
         printf("clock_gettime failed: %s\n", strerror(errno));
 
     future.tv_sec += SLEEP_TIME_US / 1000000;
@@ -227,7 +257,7 @@ void test_pthread_cond_timedwait()
 
     custom_time_t start, end;
     capture_timestamp(&start);
-    int ret = pthread_cond_timedwait(&cond, &mutex, &future);
+    ret = pthread_cond_timedwait(&cond, &mutex, &future);
     if (ret != 0 && ret != ETIMEDOUT)
         printf("pthread_cond_timedwait failed: %s\n", strerror(ret));
     capture_timestamp(&end);
@@ -285,9 +315,10 @@ void test_busy_sleep(void)
     capture_timestamp(&start);
     struct timespec sleep_start, now;
     int ret = clock_gettime(CLOCK_MONOTONIC, &sleep_start);
-    if (ret != 0)
+    if (ret != 0) {
         printf("clock_gettime failed: %s\n", strerror(errno));
-    else
+        return;
+    } else
         printf("CLOCK_MONOTONIC start: %lld.%09ld\n",
                (long long)sleep_start.tv_sec, sleep_start.tv_nsec);
 

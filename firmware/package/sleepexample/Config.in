@@ -28,6 +28,11 @@ config BR2_PACKAGE_SLEEPEXAMPLE
         - CONFIG_TICK_ONESHOT=y            # Allows precise one-shot timers
         - CONFIG_HZ=1000                   # Recommended for millisecond accuracy
         - CONFIG_CLKSRC_STM32=y            # STM32 clocksource driver
+        - CONFIG_COMPAT_32BIT_TIME=y       # Syscall ABI required by the uClibc toolchain
+
+      Selecting this package adds CONFIG_COMPAT_32BIT_TIME through a kernel
+      configuration fragment. It remains disabled in the minimal image when
+      this example is not selected.
 
       **Required for specific tests**
         - CONFIG_TIMERFD=y                 # Needed for timerfd_create() test

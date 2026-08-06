@@ -9,6 +9,13 @@ SLEEPEXAMPLE_VERSION = 1.0
 SLEEPEXAMPLE_SITE = $(BR2_EXTERNAL_FIRMWARE_PATH)/package/sleepexample/project
 SLEEPEXAMPLE_SITE_METHOD = local
 
+# Linux is parsed before br2-external package makefiles. The selected example
+# must restore the 32-bit time syscall ABI used by this uClibc toolchain.
+ifeq ($(BR2_PACKAGE_SLEEPEXAMPLE),y)
+LINUX_KCONFIG_FRAGMENT_FILES += \
+	$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/linux-sleep.config
+endif
+
 # Build commands
 define SLEEPEXAMPLE_BUILD_CMDS
 	$(MAKE) \
