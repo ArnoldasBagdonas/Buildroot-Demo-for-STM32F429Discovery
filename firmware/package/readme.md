@@ -91,11 +91,12 @@ diagnostic package may be selected in addition to any one example:
 | `ioexample8` | `BR2_PACKAGE_IOEXAMPLE8` | `ioexample8` | RS-485 test, defaulting to `/dev/ttySTM1` |
 | `displayexample` | `BR2_PACKAGE_DISPLAYEXAMPLE` | `displayexample` | LCD slideshow testing PNG, JPEG, GIF, and BMP decoding |
 | `displaydebug` | `BR2_PACKAGE_DISPLAYDEBUG` | `displaydebug` | Optional reusable kernel and peripheral diagnostics |
+| `usbserialdevice` | `BR2_PACKAGE_USBSERIALDEVICE` | `usbserialchat` | USB CDC ACM data port with a loopback test utility |
 
 Optional: confirm the selection before building:
 
 ```bash
-grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|DISPLAY(EXAMPLE|DEBUG)|PERIPHERY)=y$' buildroot/.config
+grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|DISPLAY(EXAMPLE|DEBUG)|USBSERIALDEVICE|PERIPHERY)=y$' buildroot/.config
 ```
 
 Examples 3 through 7 automatically select `BR2_PACKAGE_PERIPHERY`. It is an
@@ -107,6 +108,16 @@ ST-Link serial console remains available in every image. Do not combine either
 UART example with `displayexample`, because USART3 and LTDC share PB10/PB11.
 `make build_all` and `make flash` stop with an explicit error if this conflict
 is selected.
+
+Selecting `usbserialdevice` makes the USB USER micro-AB connector enumerate on
+the host as a CDC ACM adapter (normally `/dev/ttyACM0`) while keeping the Linux
+console and shell on USART1. Applications use `/dev/ttyGS0` on the board as an
+independent bidirectional data port; `usbserialchat` provides a loopback test.
+The connector uses the OTG HS controller's internal full-speed PHY. If the
+kernel was already configured before selecting the package, run
+`make -C buildroot BR2_EXTERNAL=/workspace/firmware linux-reconfigure` once
+before `make build_all`. See
+[`usbserialdevice/readme.md`](usbserialdevice/readme.md) for usage.
 
 ### 4. Build the flashable firmware
 

@@ -116,6 +116,17 @@ displayexample 2 /path/to/images
 The alternative directory may contain `.png`, `.jpg`, `.jpeg`, `.gif`, and
 `.bmp` files.
 
+## Known-good ST hardware demonstration
+
+Before changing Linux drivers, the LCD and touch panel were verified with
+ST's compiled STM32F429I-Discovery demonstration:
+
+<https://www.st.com/resource/en/compiled_demos/32f429idiscovery_demo.zip>
+
+Download and extract the archive on the host. The tested image is
+`STM32CubeDemo_STM32F429I-Discovery_1.5.0.hex`. Flashing it replaces Linux, so
+keep this as a hardware sanity test and reflash the Buildroot image afterward.
+
 ## USART3/LTDC pin conflict
 
 USART3 uses PB10/PB11 for `ioexample7` and `ioexample8`. The LCD needs the same

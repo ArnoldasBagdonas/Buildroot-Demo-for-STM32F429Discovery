@@ -1,0 +1,15 @@
+/* USB CDC ACM data port shared by the base, display, and USART3 variants. */
+
+/*
+ * The board's USB USER connector is attached to the OTG HS controller's
+ * embedded full-speed PHY on PB12/PB14/PB15. This matches the upstream
+ * stm32f429-disco board description; the separate OTG FS block is not wired
+ * to this connector.
+ */
+&usbotg_hs {
+	compatible = "st,stm32f4x9-fsotg";
+	dr_mode = "peripheral";
+	pinctrl-names = "default";
+	pinctrl-0 = <&usbotg_fs_pins_b>;
+	status = "okay";
+};

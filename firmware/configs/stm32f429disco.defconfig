@@ -9,6 +9,7 @@ BR2_TOOLCHAIN_EXTERNAL_HEADERS_6_1=y
 # BR2_TOOLCHAIN_EXTERNAL_HAS_THREADS_NPTL is not set
 BR2_TOOLCHAIN_EXTERNAL_CXX=y
 BR2_DL_DIR="/workspace/buildroot-downloads"
+BR2_GLOBAL_PATCH_DIR="$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/patches"
 BR2_ENABLE_LTO=y
 BR2_INIT_NONE=y
 BR2_ROOTFS_OVERLAY="/workspace/firmware/board/stm32f429disco/rootfs-minimal-overlay"

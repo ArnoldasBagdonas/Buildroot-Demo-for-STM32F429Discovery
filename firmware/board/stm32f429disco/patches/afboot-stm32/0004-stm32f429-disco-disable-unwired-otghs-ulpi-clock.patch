@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Buildroot Demo <noreply@example.com>
+Date: Fri, 7 Aug 2026 23:20:00 +0300
+Subject: [PATCH] stm32f429-disco: disable unwired OTG HS ULPI clock
+
+The STM32F429 Discovery USB USER connector uses the OTG HS controller with
+its embedded full-speed PHY.  It has no external ULPI PHY or ULPI clock.
+
+The board clock setup enables nearly every AHB1 peripheral, including the
+OTGHSULPI clock gate.  Linux probes DWC2 before unused clocks are disabled;
+with OTGHSULPIEN still set, the first DWC2 core reset never completes even
+after selecting the embedded PHY.
+
+Keep the OTGHS core clock enabled but explicitly disable its unused ULPI
+clock.  This matches the STM32CubeF4 USB device reference configuration for
+the board.
+
+Signed-off-by: Buildroot Demo <noreply@example.com>
+---
+ stm32f429i-disco.c | 6 ++++++
+ stm32f4_regs.h     | 1 +
+ 2 files changed, 7 insertions(+)
+
+diff --git a/stm32f429i-disco.c b/stm32f429i-disco.c
+index da35904..4999565 100644
+--- a/stm32f429i-disco.c
++++ b/stm32f429i-disco.c
+@@ -70,6 +70,12 @@ static void clock_setup(void)
+ 	*RCC_AHB1ENR |= 0x7ef417ff;
+ 	*RCC_AHB2ENR |= 0xf1;
+ 	*RCC_AHB3ENR |= 0x1;
++
++	/*
++	 * USB USER uses the OTG HS embedded FS PHY.  No external ULPI PHY is
++	 * wired, and leaving its clock gate enabled prevents a DWC2 reset.
++	 */
++	*RCC_AHB1ENR &= ~RCC_AHB1ENR_OTGHSULPIEN;
+ 	*RCC_APB1ENR |= 0xf6fec9ff;
+ 	*RCC_APB2ENR |= 0x4777f33;
+ 
+diff --git a/stm32f4_regs.h b/stm32f4_regs.h
+index f9646ea..403bc58 100644
+--- a/stm32f4_regs.h
++++ b/stm32f4_regs.h
+@@ -25,6 +25,7 @@
+ #define RCC_DCKCFGR_SDIO48	(1 << 28)
+ 
+ #define RCC_AHB1ENR_GPIOGEN	(1 << 6)
++#define RCC_AHB1ENR_OTGHSULPIEN	(1 << 30)
+ 
+ #define RCC_AHB1LPENR_OTGHSULPILPEN	(1 << 30)
+ 
+-- 
+2.39.5

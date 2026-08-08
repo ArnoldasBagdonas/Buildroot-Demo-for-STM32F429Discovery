@@ -1,0 +1,118 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Buildroot Demo <noreply@example.com>
+Date: Sat, 8 Aug 2026 10:00:00 +0000
+Subject: [PATCH] usb: dwc2: stm32f4: complete gadget OUT from endpoint XFRC
+
+The STM32F429 OTG controller delays the RX FIFO OUTDONE status until the
+following OUT packet. The generic DWC2 PIO path masks the endpoint transfer
+complete interrupt and waits for OUTDONE, so ttyGS0 receives every write one
+transaction late and never receives the final write by itself.
+
+Use PIO for this integration so RX data can be copied before endpoint
+interrupt processing. Enable the OUT endpoint transfer-complete interrupt,
+complete non-control requests from that interrupt, and ignore the controller's
+later stale OUTDONE status. This matches the ordering required by the STM32
+controller: consume RX FIFO data first, then handle endpoint completion.
+
+Signed-off-by: Buildroot Demo <noreply@example.com>
+---
+ drivers/usb/dwc2/gadget.c | 35 ++++++++++++++++++++++++++++-------
+ drivers/usb/dwc2/params.c |  8 ++++++++
+ 2 files changed, 36 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/usb/dwc2/params.c b/drivers/usb/dwc2/params.c
+index 8eab04392bda..403303d98fd1 100644
+--- a/drivers/usb/dwc2/params.c
++++ b/drivers/usb/dwc2/params.c
+@@ -177,6 +177,14 @@ static void dwc2_set_stm32f4x9_fsotg_params(struct dwc2_hsotg *hsotg)
+ 	p->max_packet_count = 256;
+ 	p->phy_type = DWC2_PHY_TYPE_PARAM_FS;
+ 	p->i2c_enable = false;
++
++	/*
++	 * The STM32F4 OUT-completion workaround consumes RX FIFO status
++	 * before handling the endpoint interrupt, so it requires PIO
++	 * instead of DMA.
++	 */
++	p->g_dma = false;
++	p->g_dma_desc = false;
+ 	p->activate_stm_fs_transceiver = true;
+ }
+ 
+diff --git a/drivers/usb/dwc2/gadget.c b/drivers/usb/dwc2/gadget.c
+index 8b15742d9e8a..c0e2ffec04d6 100644
+--- a/drivers/usb/dwc2/gadget.c
++++ b/drivers/usb/dwc2/gadget.c
+@@ -2500,7 +2500,14 @@ static void dwc2_hsotg_handle_rx(struct dwc2_hsotg *hsotg)
+ 		dev_dbg(hsotg->dev, "OutDone (Frame=0x%08x)\n",
+ 			dwc2_hsotg_read_frameno(hsotg));
+ 
+-		if (!using_dma(hsotg))
++		/*
++		 * STM32F4 completes non-control OUT requests from endpoint XFRC.
++		 * Its FIFO OUTDONE status is delayed until the next OUT packet and
++		 * would otherwise complete that following request by mistake.
++		 */
++		if (!using_dma(hsotg) &&
++		    !(epnum && of_device_is_compatible(hsotg->dev->of_node,
++						      "st,stm32f4x9-fsotg")))
+ 			dwc2_hsotg_handle_outdone(hsotg, epnum);
+ 		break;
+ 
+@@ -3090,10 +3097,12 @@ static void dwc2_hsotg_epint(struct dwc2_hsotg *hsotg, unsigned int idx,
+ 
+ 			if (idx == 0 && !hs_ep->req)
+ 				dwc2_hsotg_enqueue_setup(hsotg);
+-		} else if (using_dma(hsotg)) {
++		} else if (using_dma(hsotg) ||
++			   (idx && of_device_is_compatible(hsotg->dev->of_node,
++							 "st,stm32f4x9-fsotg"))) {
+ 			/*
+-			 * We're using DMA, we need to fire an OutDone here
+-			 * as we ignore the RXFIFO.
++			 * DMA ignores the RX FIFO. STM32F4 PIO also completes
++			 * here because its FIFO OUTDONE status is delayed.
+ 			 */
+ 			if (!hs_ep->isochronous || !(ints & DXEPINT_OUTTKNEPDIS))
+ 				dwc2_hsotg_handle_outdone(hsotg, idx);
+@@ -3497,8 +3506,12 @@ static void dwc2_hsotg_core_init_disconnected(struct dwc2_hsotg *hsotg,
+ 	 * don't need XferCompl, we get that from RXFIFO in slave mode. In
+ 	 * DMA mode we may need this and StsPhseRcvd.
+ 	 */
+-	dwc2_writel(hsotg, (using_dma(hsotg) ? (DIEPMSK_XFERCOMPLMSK |
+-		DOEPMSK_STSPHSERCVDMSK) : 0) |
++	dwc2_writel(hsotg,
++		((using_dma(hsotg) ||
++		  of_device_is_compatible(hsotg->dev->of_node,
++					  "st,stm32f4x9-fsotg")) ?
++		 DIEPMSK_XFERCOMPLMSK : 0) |
++		(using_dma(hsotg) ? DOEPMSK_STSPHSERCVDMSK : 0) |
+ 		DOEPMSK_EPDISBLDMSK | DOEPMSK_AHBERRMSK |
+ 		DOEPMSK_SETUPMSK,
+ 		DOEPMSK);
+@@ -3757,6 +3770,12 @@ static irqreturn_t dwc2_hsotg_irq(int irq, void *pw)
+ 		dwc2_hsotg_irq_enumdone(hsotg);
+ 	}
+ 
++	/* STM32F4 PIO must copy OUT data before processing endpoint XFRC. */
++	if ((gintsts & GINTSTS_RXFLVL) &&
++	    of_device_is_compatible(hsotg->dev->of_node,
++				    "st,stm32f4x9-fsotg"))
++		dwc2_hsotg_handle_rx(hsotg);
++
+ 	if (gintsts & (GINTSTS_OEPINT | GINTSTS_IEPINT)) {
+ 		u32 daint = dwc2_readl(hsotg, DAINT);
+ 		u32 daintmsk = dwc2_readl(hsotg, DAINTMSK);
+@@ -3806,7 +3825,9 @@ static irqreturn_t dwc2_hsotg_irq(int irq, void *pw)
+ 		dwc2_hsotg_irq_fifoempty(hsotg, true);
+ 	}
+ 
+-	if (gintsts & GINTSTS_RXFLVL) {
++	if ((gintsts & GINTSTS_RXFLVL) &&
++	    !of_device_is_compatible(hsotg->dev->of_node,
++				     "st,stm32f4x9-fsotg")) {
+ 		/*
+ 		 * note, since GINTSTS_RxFLvl doubles as FIFO-not-empty,
+ 		 * we need to retry dwc2_hsotg_handle_rx if this is still
+-- 
+2.39.5
