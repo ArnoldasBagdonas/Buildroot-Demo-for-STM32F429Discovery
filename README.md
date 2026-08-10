@@ -21,8 +21,11 @@ Before Docker or Podman creates the container, the devcontainer
 `.devcontainer/prepare-cy-usb.sh` on the host. The scripts find the connected
 ST-LINK device and grant read/write access to its current device node. The
 Cypress script removes the incorrectly matched `cytherm` driver, loads
-`cdc_acm`, and displays the resulting `/dev/ttyACM*` node. The scripts may
-display a host `sudo` or PolicyKit authentication prompt. ST-LINK USB bus and
+`cdc_acm`, and displays the resulting `/dev/ttyACM*` node. When neither device
+is connected, both scripts exit successfully without requesting authentication,
+so the devcontainer remains usable for builds and host-only tests. A host
+`sudo` or PolicyKit authentication prompt is only needed when connected hardware
+requires its permissions or driver binding to be changed. ST-LINK USB bus and
 device numbers are detected automatically and are not hard-coded.
 
 If host authentication cannot be requested by VS Code, run the preparation
@@ -35,7 +38,8 @@ bash .devcontainer/prepare-cy-usb.sh
 
 The host must provide `/dev/bus/usb` before the container starts. On a native
 Linux host this is normally already present. On Windows with WSL2, attach the
-device as described below first.
+device as described below first. The USB bus is bind-mounted as a directory so
+an existing Podman devcontainer can restart even after a USB device is unplugged.
 
 ## USB Setup Workflow for WSL2 + Devcontainer
 

@@ -48,7 +48,10 @@
 	// https://learn.microsoft.com/en-us/windows/wsl/connect-usb
     "runArgs": [
         "--privileged",
-        "--device=/dev/bus/usb:/dev/bus/usb"
+        // Bind the bus directory instead of asking Podman to expand it into
+        // per-device mappings. Per-device mappings make a stopped container
+        // impossible to restart after ST-LINK or a serial adapter is unplugged.
+        "--mount=type=bind,source=/dev/bus/usb,target=/dev/bus/usb"
     ],
     "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
     "workspaceFolder": "/workspace",
