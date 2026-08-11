@@ -265,7 +265,8 @@ The default firmware now includes the external `find-my-device` package and a
 conflict-free SPI4 W5500 device tree. See the package's
 [wiring, build, bring-up, and debugging guide](firmware/package/find-my-device/README.md)
 before connecting the module. `make flash` automatically selects the matching
-`-w5500.dtb` for the current display, USART3, and USB package combination.
+`-w5500.dtb` for the current display and USB package combination. The UART5
+example port is enabled in every board DTB and does not conflict with either.
 
 ### Clean build while preserving the SDK
 

@@ -102,12 +102,10 @@ grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|DISPLAY(EXAMPLE
 Examples 3 through 7 automatically select `BR2_PACKAGE_PERIPHERY`. It is an
 internal build dependency, so you only need to select the example itself.
 
-The base DTB keeps USART3 disabled. Selecting `ioexample7` or `ioexample8`
-automatically builds and flashes `stm32f429disco-usart3.dtb`; the USART1
-ST-Link serial console remains available in every image. Do not combine either
-UART example with `displayexample`, because USART3 and LTDC share PB10/PB11.
-`make build_all` and `make flash` stop with an explicit error if this conflict
-is selected.
+UART examples use `/dev/ttySTM1`, backed by UART5 on PC12 (TX) and PD2 (RX).
+UART5 is enabled in every board DTB and can coexist with `displayexample` and
+the W5500 SPI4 interface. The USART1 ST-Link serial console remains available
+in every image as `/dev/ttySTM0`.
 
 Selecting `usbserialdevice` makes the USB USER micro-AB connector enumerate on
 the host as a CDC ACM adapter (normally `/dev/ttyACM0`) while keeping the Linux

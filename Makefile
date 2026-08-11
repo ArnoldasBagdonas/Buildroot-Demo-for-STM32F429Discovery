@@ -97,18 +97,9 @@ sdk-configure: buildroot
 # -------------------------------------------------------------
 # Build and flash targets
 # -------------------------------------------------------------
-.PHONY: build_all rebuild_all distclean check-example-conflicts
-build_all: sdk check-example-conflicts
+.PHONY: build_all rebuild_all distclean
+build_all: sdk
 	@$(MAKE_BR)
-
-check-example-conflicts:
-	@if test -f "$(BUILDROOT_DIR)/.config" && \
-		grep -q '^BR2_PACKAGE_DISPLAYEXAMPLE=y$$' "$(BUILDROOT_DIR)/.config" && \
-		grep -Eq '^BR2_PACKAGE_IOEXAMPLE(7|8)=y$$' "$(BUILDROOT_DIR)/.config"; then \
-		$(ECHO) "ERROR: displayexample conflicts with ioexample7/ioexample8." >&2; \
-		$(ECHO) "PB10/PB11 cannot be used by LTDC and USART3 at the same time." >&2; \
-		exit 1; \
-	fi
 
 rebuild_all: buildroot
 	@set -eu; \

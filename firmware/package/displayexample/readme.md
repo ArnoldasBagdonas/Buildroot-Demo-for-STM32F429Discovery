@@ -49,9 +49,9 @@ describes the board wiring:
   on PC2 controls the LCD, and PD13 is its data/command signal.
 - The panel uses its board-specific `st,sf-tc240t-9370-t` compatibility and a
   maximum 10 MHz three-wire SPI control interface.
-- The base DTB keeps USART3 disabled because its PB10/PB11 pins conflict with
-  LTDC G4/G5. UART examples use a separate USART3-enabled DTB, and the build
-  rejects selecting those examples together with the display.
+- The UART examples use UART5 on PC12/PD2 and RS-485 DE on PD4. These free
+  expansion-header pins do not overlap LTDC, so serial and display examples
+  can be selected together.
 
 No LCD clock is assigned in the display DTB. The stock ILI9341 panel mode and
 STM32 clock framework select the pixel clock during modeset. `CONFIG_PM` lets
@@ -127,24 +127,16 @@ Download and extract the archive on the host. The tested image is
 `STM32CubeDemo_STM32F429I-Discovery_1.5.0.hex`. Flashing it replaces Linux, so
 keep this as a hardware sanity test and reflash the Buildroot image afterward.
 
-## USART3/LTDC pin conflict
+## Serial ports
 
-USART3 uses PB10/PB11 for `ioexample7` and `ioexample8`. The LCD needs the same
-pins as `LTDC_G4` and `LTDC_G5`. If both peripherals are enabled, the ILI9341
-SPI control interface binds but LTDC cannot claim its pinctrl state;
-consequently DRM creates neither `card0` nor `/dev/fb0`.
+The console uses USART1 on PA9/PA10. Those pins can use an external Cypress
+USB-serial adapter; a DISC1 board with ST-LINK/V2-B may instead expose USART1
+through its ST-LINK virtual COM port.
 
-The base DTB now keeps USART3 disabled. Selecting `ioexample7` or `ioexample8`
-builds and flashes `stm32f429disco-usart3.dtb`, which enables it. The display
-package builds its own DTB with LTDC enabled. `make build_all`, direct
-Buildroot kernel builds, and `make flash` reject a configuration that selects
-both kinds of example.
-
-This does not affect the serial console. The console uses USART1 on PA9/PA10.
-Those pins can use an external Cypress USB-serial adapter; a DISC1 board with
-ST-LINK/V2-B may instead expose USART1 through its ST-LINK virtual COM port.
-Only the separate USART3 example port is disabled in the base and display
-images.
+`ioexample7` and `ioexample8` use the independent `/dev/ttySTM1` port: UART5
+TX on PC12 (P2 pin 44), RX on PD2 (P2 pin 40), and, for RS-485, DE on PD4
+(P2 pin 38). None of those signals overlaps the LTDC pinctrl state, so the
+UART examples can be used while the display is active.
 
 ## Debugging with the optional displaydebug package
 
@@ -180,12 +172,12 @@ Verify that the display-specific DTB was booted:
 
 ```sh
 cat /sys/firmware/devicetree/base/soc/*40016800*/status
-cat /sys/firmware/devicetree/base/soc/*40004800*/status
+cat /sys/firmware/devicetree/base/soc/*40005000*/status
 find /sys/firmware/devicetree/base/soc -name 'display@1'
 ```
 
-The expected LTDC status is `okay`, USART3 status is `disabled`, and `find`
-must print the SPI `display@1` node.
+The expected LTDC and UART5 statuses are both `okay`, and `find` must print the
+SPI `display@1` node.
 
 Check driver binding:
 
@@ -204,8 +196,8 @@ Interpret the results as follows:
 - A present `spi0.1` without a `driver` link means the ILI9341 panel driver did
   not bind.
 - `spi0.1` bound to `panel-ilitek-ili9341`, but no driver link on
-  `40016800.display-controller`, means LTDC failed to probe. Check that no UART
-  example was combined with the display example.
+  `40016800.display-controller`, means LTDC failed to probe. Check the kernel
+  log for clock, pinctrl, or memory-allocation errors.
 - Both drivers bound but no `/dev/fb0` indicates a DRM framebuffer-emulation or
   memory-allocation failure.
 - `Unable to create device for framebuffer 0; errno = -19` followed by
@@ -257,8 +249,8 @@ make flash
 ```
 
 In `make menuconfig`, select `displayexample` and the independent
-`displaydebug` package while diagnosing the LCD. Do not select `ioexample7` or
-`ioexample8`; the build deliberately rejects that PB10/PB11 conflict. Disable
+`displaydebug` package while diagnosing the LCD. `ioexample7` and `ioexample8`
+may also be selected because they use conflict-free UART5 pins. Disable
 `displaydebug` for the final image-size check.
 
 Check these milestones during every iteration:

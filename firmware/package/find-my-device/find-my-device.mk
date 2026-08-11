@@ -19,15 +19,11 @@ BUSYBOX_KCONFIG_FRAGMENT_FILES += \
 ifeq ($(BR2_PACKAGE_USBSERIALDEVICE),y)
 ifeq ($(BR2_PACKAGE_DISPLAYEXAMPLE),y)
 FIND_MY_DEVICE_DTS = stm32f429disco-usbserialdevice-display-w5500
-else ifneq ($(filter y,$(BR2_PACKAGE_IOEXAMPLE7) $(BR2_PACKAGE_IOEXAMPLE8)),)
-FIND_MY_DEVICE_DTS = stm32f429disco-usbserialdevice-usart3-w5500
 else
 FIND_MY_DEVICE_DTS = stm32f429disco-usbserialdevice-w5500
 endif
 else ifeq ($(BR2_PACKAGE_DISPLAYEXAMPLE),y)
 FIND_MY_DEVICE_DTS = stm32f429disco-display-w5500
-else ifneq ($(filter y,$(BR2_PACKAGE_IOEXAMPLE7) $(BR2_PACKAGE_IOEXAMPLE8)),)
-FIND_MY_DEVICE_DTS = stm32f429disco-usart3-w5500
 else
 FIND_MY_DEVICE_DTS = stm32f429disco-custom-w5500
 endif

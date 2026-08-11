@@ -1,4 +1,4 @@
-/* USB CDC ACM data port shared by the base, display, and USART3 variants. */
+/* USB CDC ACM data port shared by the base and display variants. */
 
 /*
  * The board's USB USER connector is attached to the OTG HS controller's

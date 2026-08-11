@@ -18,6 +18,6 @@ config BR2_PACKAGE_IOEXAMPLE7
       Dependencies:
         https://github.com/vsergeev/c-periphery
 
-      Selecting this example builds and flashes the USART3-enabled board
-      device tree. It cannot be combined with displayexample because USART3
-      and LTDC share PB10/PB11.
+      The example uses UART5 on PC12 (TX) and PD2 (RX). These expansion-header
+      pins do not overlap the LCD LTDC signals or the W5500 SPI4 wiring, so
+      this package can be combined with displayexample and find-my-device.

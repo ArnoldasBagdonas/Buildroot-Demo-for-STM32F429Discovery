@@ -21,8 +21,6 @@ LINUX_KCONFIG_FRAGMENT_FILES += \
 
 ifeq ($(BR2_PACKAGE_DISPLAYEXAMPLE),y)
 USBSERIALDEVICE_DTS = stm32f429disco-usbserialdevice-display
-else ifneq ($(filter y,$(BR2_PACKAGE_IOEXAMPLE7) $(BR2_PACKAGE_IOEXAMPLE8)),)
-USBSERIALDEVICE_DTS = stm32f429disco-usbserialdevice-usart3
 else
 USBSERIALDEVICE_DTS = stm32f429disco-usbserialdevice
 endif

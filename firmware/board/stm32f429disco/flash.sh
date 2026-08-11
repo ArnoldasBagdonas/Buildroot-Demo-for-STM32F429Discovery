@@ -36,16 +36,11 @@ if [ -f "${OUTPUT_DIR}/.config" ]; then
   CONFIG_FILE=${OUTPUT_DIR}/.config
 fi
 DISPLAY_ENABLED=false
-USART3_ENABLED=false
 USBSERIALDEVICE_ENABLED=false
 FIND_MY_DEVICE_ENABLED=false
 if [ -f "${CONFIG_FILE}" ] && \
    grep -q '^BR2_PACKAGE_DISPLAYEXAMPLE=y$' "${CONFIG_FILE}"; then
   DISPLAY_ENABLED=true
-fi
-if [ -f "${CONFIG_FILE}" ] && \
-   grep -Eq '^BR2_PACKAGE_IOEXAMPLE(7|8)=y$' "${CONFIG_FILE}"; then
-  USART3_ENABLED=true
 fi
 if [ -f "${CONFIG_FILE}" ] && \
    grep -q '^BR2_PACKAGE_USBSERIALDEVICE=y$' "${CONFIG_FILE}"; then
@@ -56,20 +51,12 @@ if [ -f "${CONFIG_FILE}" ] && \
   FIND_MY_DEVICE_ENABLED=true
 fi
 
-if ${DISPLAY_ENABLED} && ${USART3_ENABLED}; then
-  echo "ERROR: displayexample conflicts with ioexample7/ioexample8." >&2
-  echo "PB10/PB11 cannot be used by LTDC and USART3 at the same time." >&2
-  exit 1
-elif ${USBSERIALDEVICE_ENABLED} && ${DISPLAY_ENABLED}; then
+if ${USBSERIALDEVICE_ENABLED} && ${DISPLAY_ENABLED}; then
   DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-usbserialdevice-display.dtb
-elif ${USBSERIALDEVICE_ENABLED} && ${USART3_ENABLED}; then
-  DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-usbserialdevice-usart3.dtb
 elif ${USBSERIALDEVICE_ENABLED}; then
   DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-usbserialdevice.dtb
 elif ${DISPLAY_ENABLED}; then
   DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-display.dtb
-elif ${USART3_ENABLED}; then
-  DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-usart3.dtb
 else
   DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-custom.dtb
 fi

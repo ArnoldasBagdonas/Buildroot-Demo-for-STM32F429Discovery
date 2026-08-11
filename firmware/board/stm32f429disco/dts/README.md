@@ -225,12 +225,11 @@ decoders. `fbv` also retains its built-in BMP support without adding a decoder
 library. Its Linux settings live in `linux-display.config` rather than the
 minimal `linux.config`.
 
-The base DTS keeps USART3 disabled because its PB10/PB11 signals conflict with
-the LCD's LTDC_G4/LTDC_G5 signals. The display DTS includes that base and adds
-only the LCD nodes. The package makefile adds the display DTS to the Linux
-build only while the package is selected. Consequently, a normal build
-contains neither the display nodes nor the display kernel and root-filesystem
-payload.
+The base DTS enables UART5 on PC12/PD2, which does not overlap the LCD's LTDC
+signals. The display DTS includes that base and adds only the LCD nodes. The
+package makefile adds the display DTS to the Linux build only while the package
+is selected. Consequently, a normal build contains neither the display nodes
+nor the display kernel and root-filesystem payload.
 
 On a display-example image, `/dev/fb0` is the compatibility framebuffer used
 by the slideshow script. See `firmware/package/readme.md` for the complete
@@ -334,7 +333,8 @@ echo 0 > unexport
 
 ### SERIAL
 
-This example configures USART3 on PB10 (TX) and PB11 (RX), allowing user-space access as:
+This example configures UART5 on PC12 (TX, P2 pin 44) and PD2 (RX, P2 pin 40),
+allowing user-space access as:
 
 - Standard serial port → `/dev/ttySTM1`
 - RS-485 mode → via `ioctl` (`TIOCSRS485`)
@@ -344,13 +344,11 @@ Example user-space apps:
 - `ioexample7` → UART
 - `ioexample8` → RS-485
 
-USART3 is disabled in `stm32f429disco-custom.dts`. Selecting either UART
-example conditionally builds `stm32f429disco-usart3.dtb`, which overrides the
-node to `status = "okay"`; `make flash` selects that DTB automatically. The
-USART1 serial console remains enabled in every image.
-
-USART3 cannot be combined with `displayexample`: PB10/PB11 are also LCD data
-pins. The build and flash targets report an error if both are selected.
+UART5 is enabled in the shared `stm32f429disco-custom.dts`, so `/dev/ttySTM1`
+is available in minimal and display images without another DTB variant. The
+USART1 serial console remains enabled in every image. PC12/PD2 do not overlap
+the LTDC or W5500 pins, so both UART examples can be combined with those
+features. RS-485 driver-enable uses free PD4 (P2 pin 38).
 
 **Test Manually**:
 
@@ -400,70 +398,46 @@ Parity/Stop Bits Quick Reference:
 
 If your driver supports RS485 mode, configure TX and RX delay times via Device Tree or configure RS485 parameters dynamically (user space app).
 
-**Device Trees** (`stm32f429disco-custom.dts` and
-`stm32f429disco-usart3.dts`)
+**Device Tree** (`stm32f429disco-custom.dts`)
 
-> **Note**: if the DTS does not define a **serial alias** for `usart3`, the STM32 USART driver will not assign a valid device node (e.g., `/dev/ttySTM1`, `/dev/ttySTM2`).
+> **Note**: if the DTS does not define a **serial alias** for `usart5`, the STM32 USART driver will not assign a valid device node (e.g., `/dev/ttySTM1`, `/dev/ttySTM2`).
 
 RS-485 with DE GPIO control:
 ```dts
 . . .
 	aliases {
 		serial0 = &usart1;
-		serial1 = &usart3;
+		serial1 = &usart5;
 	};
 . . .
-&usart3 {
-    pinctrl-names = "default";
-    pinctrl-0 = <&usart3_pins_a>;
-	status = "disabled";
-
-	/* ioexample8 enables RS-485 dynamically; use PD12 for DE control. */
-	rts-gpios = <&gpiod 12 GPIO_ACTIVE_HIGH>;
-};
-```
-
-The UART-example variant enables the inherited node:
-
-```dts
-#include "stm32f429disco-custom.dts"
-
-&usart3 {
-	status = "okay";
-};
-```
-
-Alternatively, hardware flow control (RTS/CTS):
-
-```dts
-&usart3 {
-    pinctrl-names = "default";
-    pinctrl-0 = <&usart3_pins_a>;
-	status = "okay";
-
-	/* UART has dedicated lines for RTS/CTS hardware flow control */
-	/* enabled by pinmux configuration                            */
-	uart-has-rtscts;
-};
-
-/* Override usart3_pins_a */
 &pinctrl {
-    usart3_pins_a: usart3-0 {
-        pins1 {
-            pinmux = <STM32_PINMUX('B', 10, AF7)>, // USART3_TX
-                     <STM32_PINMUX('B', 14, AF7)>; // USART3_RTS
-            bias-disable;
-            drive-push-pull;
-            slew-rate = <0>;
-        };
-        pins2 {
-            pinmux = <STM32_PINMUX('B', 11, AF7)>, // USART3_RX
-                     <STM32_PINMUX('B', 13, AF7)>; // USART3_CTS
-            bias-disable;
-        };
-    };
+	uart5_pins: uart5-0 {
+		pins1 {
+			pinmux = <STM32_PINMUX('C', 12, AF8)>; /* UART5_TX */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <0>;
+		};
+		pins2 {
+			pinmux = <STM32_PINMUX('D', 2, AF8)>; /* UART5_RX */
+			bias-disable;
+		};
+	};
+};
+
+&usart5 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart5_pins>;
+	status = "okay";
+
+	/* ioexample8 enables RS-485 dynamically; use PD4 for DE control. */
+	rts-gpios = <&gpiod 4 GPIO_ACTIVE_HIGH>;
 };
 ```
+
+UART5 has no dedicated RTS/CTS pair. The STM32 serial driver toggles the
+`rts-gpios` line as RS-485 DE when `ioexample8` enables RS-485 with
+`TIOCSRS485`.
 
 **Kernel Configuration** (`linux.config`)
 

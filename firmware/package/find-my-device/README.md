@@ -48,15 +48,14 @@ on their current peripherals:
 | LCD and gyroscope | SPI5 PF7/PF8/PF9, CS PC1/PC2, LTDC pins |
 | USB USER CDC | PB12/PB14/PB15, OTG HS embedded FS PHY |
 | Console | USART1 PA9/PA10 |
-| UART examples | USART3 PB10/PB11 and RS-485 DE PD12 |
+| UART examples | UART5 PC12/PD2 and RS-485 DE PD4 |
 | I2C example | I2C3 PA8/PC9 |
 | PWM example | PB4 |
 | GPIO examples | PA0, PG13, PG14 |
 
-The repository's pre-existing display/USART3 conflict still applies because
-both use PB10/PB11. W5500 introduces no new conflict with either variant. Six
-combined DTBs cover the minimal, display, USART3, USB, USB+display, and
-USB+USART3 selections.
+The UART examples now use PC12/PD2, so they can run alongside both the display
+and W5500. Four W5500 DTBs cover the minimal, display, USB, and USB+display
+selections; UART5 is present in their shared base device tree.
 
 Optional controls also avoid existing examples:
 
@@ -88,9 +87,8 @@ buildroot/output/images/xipImage
 buildroot/output/images/stm32f429disco-custom-w5500.dtb
 ```
 
-`flash.sh` automatically chooses the `-w5500.dtb` matching the enabled display,
-USART3, and USB packages. Flash normally with `make flash` after ST-LINK is
-connected.
+`flash.sh` automatically chooses the `-w5500.dtb` matching the enabled display
+and USB packages. Flash normally with `make flash` after ST-LINK is connected.
 
 Run the hardware-independent protocol suite directly in the devcontainer:
 
