@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -eu
+
+if [ ! -r /var/run/find-my-device.pid ]; then
+	echo "find-my-device is not running" >&2
+	exit 1
+fi
+
+FMD_PID=$(cat /var/run/find-my-device.pid)
+kill -USR1 "${FMD_PID}"
+echo "Physical confirmation signal sent to find-my-device (PID ${FMD_PID})."

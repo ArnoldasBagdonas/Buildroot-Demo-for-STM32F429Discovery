@@ -1,0 +1,11 @@
+config BR2_PACKAGE_FIND_MY_DEVICE
+	bool "Find My Device: W5500, mDNS, and onboarding API"
+	help
+	  Install a Linux implementation of the FreeRTOS Find My Device
+	  reference target. It enables a W5500 on conflict-free SPI4 pins,
+	  obtains an IPv4 address, advertises _device-setup._tcp.local over
+	  mDNS, and serves the API v3 HTTP/OAuth/WebSocket onboarding flow.
+
+	  The device ID and locally administered MAC address are derived from
+	  the STM32 factory unique ID. Optional external confirmation-button
+	  and status-LED GPIOs avoid every pin used by the existing examples.

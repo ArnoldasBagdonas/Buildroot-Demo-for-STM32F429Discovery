@@ -38,6 +38,7 @@ fi
 DISPLAY_ENABLED=false
 USART3_ENABLED=false
 USBSERIALDEVICE_ENABLED=false
+FIND_MY_DEVICE_ENABLED=false
 if [ -f "${CONFIG_FILE}" ] && \
    grep -q '^BR2_PACKAGE_DISPLAYEXAMPLE=y$' "${CONFIG_FILE}"; then
   DISPLAY_ENABLED=true
@@ -49,6 +50,10 @@ fi
 if [ -f "${CONFIG_FILE}" ] && \
    grep -q '^BR2_PACKAGE_USBSERIALDEVICE=y$' "${CONFIG_FILE}"; then
   USBSERIALDEVICE_ENABLED=true
+fi
+if [ -f "${CONFIG_FILE}" ] && \
+   grep -q '^BR2_PACKAGE_FIND_MY_DEVICE=y$' "${CONFIG_FILE}"; then
+  FIND_MY_DEVICE_ENABLED=true
 fi
 
 if ${DISPLAY_ENABLED} && ${USART3_ENABLED}; then
@@ -67,6 +72,10 @@ elif ${USART3_ENABLED}; then
   DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-usart3.dtb
 else
   DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-custom.dtb
+fi
+
+if ${FIND_MY_DEVICE_ENABLED}; then
+  DTB_FILE=${DTB_FILE%.dtb}-w5500.dtb
 fi
 
 if [ ! -f "${DTB_FILE}" ]; then

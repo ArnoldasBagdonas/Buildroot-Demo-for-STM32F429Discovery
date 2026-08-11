@@ -1,0 +1,57 @@
+/*
+ * Conflict-free W5500 wiring for the STM32F429I-DISC1 expansion headers.
+ *
+ * SPI4: PE2=SCK, PE5=MISO, PE6=MOSI
+ * GPIO: PE4=nSCS, PE3=nINT
+ *
+ * These pins are free on the board and are not used by the project's LCD,
+ * SPI5 gyroscope, USB USER, serial, I2C, PWM, or GPIO examples.
+ */
+
+&pinctrl {
+	spi4_w5500_pins: spi4-w5500-0 {
+		pins1 {
+			pinmux = <STM32_PINMUX('E', 2, AF5)>, /* SPI4_SCK */
+				 <STM32_PINMUX('E', 6, AF5)>; /* SPI4_MOSI */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <2>;
+		};
+
+		pins2 {
+			pinmux = <STM32_PINMUX('E', 5, AF5)>; /* SPI4_MISO */
+			bias-disable;
+		};
+	};
+
+	w5500_irq_pin: w5500-irq-0 {
+		pins {
+			pinmux = <STM32_PINMUX('E', 3, GPIO)>;
+			bias-pull-up;
+		};
+	};
+};
+
+&spi4 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi4_w5500_pins>;
+	cs-gpios = <&gpioe 4 GPIO_ACTIVE_LOW>;
+
+	w5500: ethernet@0 {
+		compatible = "wiznet,w5500";
+		reg = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&w5500_irq_pin>;
+		interrupt-parent = <&gpioe>;
+		interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
+		/* Conservative for jumper wires; W5500 itself supports faster SPI. */
+		spi-max-frequency = <12000000>;
+	};
+};
+
+&romem {
+	stm32_uid: unique-id@210 {
+		reg = <0x210 0xc>;
+	};
+};

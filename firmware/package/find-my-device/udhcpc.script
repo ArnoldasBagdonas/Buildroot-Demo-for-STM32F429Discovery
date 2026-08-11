@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# Minimal DHCP hook for this initramfs. The generic Buildroot hook expects
+# file-management applets deliberately omitted from the small BusyBox build.
+case "${1:-}" in
+	deconfig)
+		ifconfig "${interface}" 0.0.0.0 up
+		;;
+	bound|renew)
+		FMD_NETMASK_ARGS=
+		FMD_BROADCAST_ARGS=
+		[ -n "${subnet:-}" ] && FMD_NETMASK_ARGS="netmask ${subnet}"
+		[ -n "${broadcast:-}" ] && FMD_BROADCAST_ARGS="broadcast ${broadcast}"
+		# The two variables intentionally expand into separate ifconfig options.
+		# shellcheck disable=SC2086
+		ifconfig "${interface}" "${ip}" ${FMD_NETMASK_ARGS} ${FMD_BROADCAST_ARGS} up
+		while route del default gw 0.0.0.0 dev "${interface}" 2>/dev/null; do :; done
+		for FMD_ROUTER in ${router:-}; do
+			route add default gw "${FMD_ROUTER}" dev "${interface}"
+		done
+		;;
+esac
+
+exit 0

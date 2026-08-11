@@ -259,6 +259,14 @@ Inside the devcontainer, flash without `sudo`:
 make flash
 ```
 
+### W5500 Find My Device target
+
+The default firmware now includes the external `find-my-device` package and a
+conflict-free SPI4 W5500 device tree. See the package's
+[wiring, build, bring-up, and debugging guide](firmware/package/find-my-device/README.md)
+before connecting the module. `make flash` automatically selects the matching
+`-w5500.dtb` for the current display, USART3, and USB package combination.
+
 ### Clean build while preserving the SDK
 
 The main configuration uses the saved external toolchain archive:
@@ -292,7 +300,9 @@ git clone https://gitlab.com/bagdoportfolio/buildroot-stm32f429-discovery-demo.g
 cd buildroot-stm32f429-discovery-demo
 ```
 
-Start the devcontainer **after** attaching USB devices as described above.
+Start the devcontainer. ST-LINK and the Cypress serial adapter are optional at
+container creation time; attach them only when flashing or using the hardware
+serial console.
 
 Build and deploy using:
 
