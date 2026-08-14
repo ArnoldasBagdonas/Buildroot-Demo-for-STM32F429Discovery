@@ -35,14 +35,12 @@ make configure
 Confirm that none of the external example packages is selected:
 
 ```sh
-if grep -E '^BR2_PACKAGE_(DISPLAYDEBUG|DISPLAYEXAMPLE|FIND_MY_DEVICE|HELLOMK|HELLOMKCPP|IOEXAMPLE[1-8]|PERIPHERY|SLEEPEXAMPLE|USBSERIALDEVICE)=y$' \
-	buildroot/.config; then
-	echo 'Disable the listed examples before continuing.' >&2
-	false
-fi
+grep -E '^BR2_PACKAGE_(DISPLAYDEBUG|DISPLAYEXAMPLE|FIND_MY_DEVICE|HELLOMK|HELLOMKCPP|IOEXAMPLE[1-8]|PERIPHERY|SLEEPEXAMPLE|USBSERIALDEVICE)=y$' \
+	buildroot/.config
 ```
 
-If an example is enabled, run `make menuconfig`, disable it, save, and run
+The command should print nothing. If it prints an enabled example, run
+`make menuconfig`, disable that example, and save the configuration. Run
 `make savedefconfig` only when the tracked defconfig should also be updated.
 
 Build the current kernel and root filesystem:
@@ -62,11 +60,10 @@ sha256sum buildroot/output/images/xipImage
 Apply the mandatory size gate:
 
 ```sh
-XIP_BYTES=$(stat -c %s buildroot/output/images/xipImage)
-XIP_MAX_BYTES=2048000
-echo "xipImage: ${XIP_BYTES}/${XIP_MAX_BYTES} bytes"
-test "${XIP_BYTES}" -le "${XIP_MAX_BYTES}"
+stat -c 'xipImage size: %s bytes' buildroot/output/images/xipImage
 ```
+
+The printed size must not exceed 2,048,000 bytes. Do not flash a larger image.
 
 Flash only after the size check succeeds:
 
@@ -88,67 +85,41 @@ version.
 Check the maintained releases at <https://www.kernel.org/>. Prefer a long-term
 kernel over a mainline or release-candidate kernel.
 
-For the Winbond W25N02KV:
+W25N02KV support was introduced in Linux 6.2 and remains present in Linux
+6.6.151 and current kernels; it has not been removed.
 
-- Linux 6.1 does not contain its SPI-NAND ID and ECC implementation.
-- W25N02KV support is present from Linux 6.2 onward.
-- Linux 6.6 LTS contains the driver and is the preferred first upgrade for this
-  flash-constrained target.
-- Much newer kernels may enable additional subsystems by default and can exceed
-  internal flash even when they support the NAND device.
+Use Linux 6.6.151 as the fixed first target so its results remain reproducible.
+Do not select the latest-stable version yet. Resolve it immediately before
+starting the separate latest-stable procedure in section 8, after Linux
+6.6.151 has passed its build and boot tests.
 
-The driver entry can be verified in the selected source at
-`drivers/mtd/nand/spi/winbond.c`. It must contain `W25N02KV` with ID bytes
-`0xaa, 0x22`.
+## 3. Create version-specific patches and back up the kernel configuration
 
-The first target is fixed so its results remain reproducible:
-
-```sh
-LTS_LINUX_VERSION=6.6.151
-```
-
-Resolve the second target from kernel.org immediately before starting its
-build. `latest_stable` deliberately excludes mainline release candidates:
-
-```sh
-LATEST_LINUX_VERSION=$(
-	curl -fsSL https://www.kernel.org/releases.json |
-	jq -er '.latest_stable.version'
-)
-echo "Latest stable Linux: ${LATEST_LINUX_VERSION}"
-test -n "${LATEST_LINUX_VERSION}"
-```
-
-Record the resolved value in the test notes. Do not silently replace it during
-an in-progress build; a later release is a separate test target.
-
-## 3. Create version-specific patches and kernel configuration
-
-Do not make a new kernel reuse a directory named for an older kernel. Preserve
-the working patch set and create a separately reviewable copy:
+When starting from a tree that contains only the Linux 6.1.27 patch directory,
+create a copy named for Linux 6.6.151:
 
 ```sh
 cd /workspace
-TARGET_LINUX_VERSION=6.6.151
-OLD_PATCH_DIR=firmware/board/stm32f429disco/linux-patches/linux-6.1.27
-NEW_PATCH_DIR="firmware/board/stm32f429disco/linux-patches/linux-${TARGET_LINUX_VERSION}"
-
-test -d "${OLD_PATCH_DIR}"
-test ! -e "${NEW_PATCH_DIR}"
-cp -a "${OLD_PATCH_DIR}" "${NEW_PATCH_DIR}"
+cp -a firmware/board/stm32f429disco/linux-patches/linux-6.1.27 \
+	firmware/board/stm32f429disco/linux-patches/linux-6.6.151
 ```
 
-Preserve the old kernel configuration in the same way. The new kernel must not
-overwrite the configuration still used by 6.1.27:
+Do not run this copy command if `linux-patches/linux-6.6.151` already exists.
+After creating it, Linux 6.1.27 continues to use
+`linux-patches/linux-6.1.27`, while Linux 6.6.151 uses the new
+`linux-patches/linux-6.6.151` directory.
+
+Back up the old kernel configuration, but keep the active file at its
+version-neutral name. The Makefile and defconfig continue to use
+`firmware/board/stm32f429disco/linux.config` for every kernel version:
 
 ```sh
-OLD_KERNEL_CONFIG=firmware/board/stm32f429disco/linux.config
-NEW_KERNEL_CONFIG="firmware/board/stm32f429disco/linux-${TARGET_LINUX_VERSION}.config"
-
-test -f "${OLD_KERNEL_CONFIG}"
-test ! -e "${NEW_KERNEL_CONFIG}"
-cp -a "${OLD_KERNEL_CONFIG}" "${NEW_KERNEL_CONFIG}"
+cp -a firmware/board/stm32f429disco/linux.config \
+	firmware/board/stm32f429disco/linux-6.1.27.config
 ```
+
+The snapshot is for comparison and rollback only. Do not rename or remove the
+active `linux.config` file.
 
 Keep the version-dependent selection in `firmware/external.mk`:
 
@@ -161,20 +132,27 @@ upstream, remove that patch from the new directory only after confirming the
 upstream code provides the same behavior. If context changed, adjust only the
 new copy. Never alter the proven old-version series as part of an upgrade.
 
-## 4. Build the 6.6.151 general image
+## 4. Select Linux 6.6.151 and apply its patches
 
 Before changing Buildroot configuration, remove the currently selected kernel
-build directory:
+build directory. This is also required if Linux 6.6 was already extracted or
+built before a new version-specific patch was added:
 
 ```sh
 make linux-dirclean
 ```
 
-Edit both Linux settings in `firmware/configs/stm32f429disco.defconfig`:
+Edit only the kernel version in
+`firmware/configs/stm32f429disco.defconfig`:
 
 ```text
 BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="6.6.151"
-BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="/workspace/firmware/board/stm32f429disco/linux-6.6.151.config"
+```
+
+Keep the active kernel configuration path version-neutral:
+
+```text
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="/workspace/firmware/board/stm32f429disco/linux.config"
 ```
 
 Load the edited defconfig:
@@ -183,11 +161,56 @@ Load the edited defconfig:
 make configure
 ```
 
-Confirm the effective value:
+Confirm both effective values:
 
 ```sh
-grep '^BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE=' buildroot/.config
+grep -E '^BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE=|^BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE=' \
+	buildroot/.config
 ```
+
+Linux 6.1 stores the STM32 device-tree files directly in:
+
+```text
+arch/arm/boot/dts/
+```
+
+Linux 6.6 stores them in:
+
+```text
+arch/arm/boot/dts/st/
+```
+
+Keep the custom board DTS version-independent. Its includes remain:
+
+```dts
+#include "stm32f429.dtsi"
+#include "stm32f429-pinctrl.dtsi"
+```
+
+Do not add `st/` to this file. Linux 6.6 compatibility is provided by this
+version-specific patch:
+
+```text
+firmware/board/stm32f429disco/linux-patches/linux-6.6.151/0004-arm-dts-stm32f429-add-flat-include-compatibility.patch
+```
+
+The patch creates two forwarding files in the extracted Linux 6.6 source:
+
+```text
+arch/arm/boot/dts/stm32f429.dtsi
+arch/arm/boot/dts/stm32f429-pinctrl.dtsi
+```
+
+Those files forward the old paths to Linux 6.6's `st/` directory. The custom
+DTS path in `firmware/configs/stm32f429disco.defconfig` remains unchanged:
+
+```text
+BR2_LINUX_KERNEL_CUSTOM_DTS_PATH="/workspace/firmware/board/stm32f429disco/dts/stm32f429disco-custom.dts"
+```
+
+This arrangement lets Linux 6.1 use its native flat files while Linux 6.6 gets
+the compatibility files from its own patch directory. Switching versions does
+not require editing the custom DTS.
 
 Download, extract, and apply the version-specific patches before the full
 build. This makes patch failures easier to distinguish from configuration or
@@ -197,120 +220,121 @@ link failures:
 make -C buildroot BR2_EXTERNAL=/workspace/firmware linux-patch V=1
 ```
 
-All patches must apply without rejected hunks. Then build the general image:
+The output must show patch `0004` being applied without rejected hunks. Confirm
+that it created both compatibility files:
 
 ```sh
-make build_all
+ls buildroot/output/build/linux-6.6.151/arch/arm/boot/dts/stm32f429.dtsi
+ls buildroot/output/build/linux-6.6.151/arch/arm/boot/dts/stm32f429-pinctrl.dtsi
 ```
 
-Verify that the chosen source contains W25N02KV support:
-
-```sh
-TARGET_LINUX_VERSION=6.6.151
-grep -n -A8 'W25N02KV' \
-	"buildroot/output/build/linux-${TARGET_LINUX_VERSION}/drivers/mtd/nand/spi/winbond.c"
-```
-
-Complete the configuration review and final checks in the following sections,
-then boot-test this image before starting the latest-stable build.
+Review or adjust patches in the new `linux-patches/linux-6.6.151` directory
+only; do not modify the working Linux 6.1.27 patch directory.
 
 ## 5. Resolve kernel configuration changes
 
-Do not accept new kernel defaults without reviewing them. Inspect warnings from
-the build, then use:
+Resolve the Linux 6.1 configuration against Linux 6.6 before attempting the
+first full build:
 
 ```sh
 make linux-menuconfig
 ```
 
-After making intentional changes, save and copy the configuration to the file
-selected by the current target. For the 6.6.151 build:
+Review removed settings and new defaults in the menu. In particular,
+`CONFIG_SLOB` no longer exists in Linux 6.6. For a small system, use the
+allocator supported by Linux 6.6, normally `CONFIG_SLUB_TINY=y`. Options such
+as `CONFIG_EXPERT=y` and `CONFIG_BASE_SMALL=y` can help keep unrelated defaults
+out of the image, but enable them only after reviewing their effects.
+
+Save and exit the menu. Then save the reviewed Linux configuration to the
+active version-neutral file:
 
 ```sh
-make -C buildroot BR2_EXTERNAL=/workspace/firmware linux-savedefconfig
-cp buildroot/output/build/linux-6.6.151/defconfig \
-	firmware/board/stm32f429disco/linux-6.6.151.config
+make linux-savedefconfig
 ```
 
-Rebuild from the saved configuration:
+This updates:
+
+```text
+firmware/board/stm32f429disco/linux.config
+```
+
+Do not rename this active file. The versioned configuration is created only
+after the image has built and passed its boot test.
+
+## 6. Build the Linux 6.6.151 general image
+
+Remove the temporary kernel build directory created by patching and
+menuconfig. The reviewed configuration is already saved in
+`firmware/board/stm32f429disco/linux.config`:
 
 ```sh
 make linux-dirclean
 make build_all
 ```
 
-For kernels where `CONFIG_SLOB` no longer exists, select the small-system
-allocator supported by that kernel, normally `CONFIG_SLUB_TINY=y`. Modern
-kernels may also require `CONFIG_EXPERT=y` and `CONFIG_BASE_SMALL=y` to keep
-desktop-oriented defaults out of the image. Review every such change in the
-generated `.config`; do not enable options solely to silence a warning.
-
-## 6. Device-tree layout in newer kernels
-
-Linux 6.6 retains the flat STM32 ARM device-tree location used by this project.
-Newer kernels place ST device trees below:
-
-```text
-arch/arm/boot/dts/st/
-```
-
-Buildroot 2024.02 predates that relocation. When upgrading to a kernel using
-the `st/` directory, the project must copy its custom DTS files into that
-directory and use a kernel-side DTS name such as:
-
-```make
-LINUX_DTS_NAME = st/stm32f429disco-custom
-```
-
-Treat this as a separate compatibility change. Confirm that the resulting DTB
-is installed as:
+Confirm that the DTB was built:
 
 ```text
 buildroot/output/images/stm32f429disco-custom.dtb
 ```
 
-Do not proceed to flashing if the expected DTB is missing.
+Do not continue to flashing if the build fails or the expected DTB is missing.
 
 ## 7. Final checks before flashing the new kernel
 
 ```sh
 test -s buildroot/output/images/xipImage
 test -s buildroot/output/images/stm32f429disco-custom.dtb
-
-XIP_BYTES=$(stat -c %s buildroot/output/images/xipImage)
-XIP_MAX_BYTES=2048000
-XIP_FREE_BYTES=$((XIP_MAX_BYTES - XIP_BYTES))
-
-echo "xipImage: ${XIP_BYTES}/${XIP_MAX_BYTES} bytes"
-echo "remaining kernel flash: ${XIP_FREE_BYTES} bytes"
-test "${XIP_BYTES}" -le "${XIP_MAX_BYTES}"
+stat -c 'xipImage size: %s bytes' buildroot/output/images/xipImage
 ```
 
-Keep the size result with the test notes. A general image that barely fits is
-not sufficient for later examples or storage filesystems; their kernel code and
-initramfs contents require additional headroom.
+The printed size must not exceed 2,048,000 bytes. Keep the result with the test
+notes. A general image that barely fits may not leave enough space for later
+feature configurations.
 
-After the general image boots successfully, enable and test one example at a
-time. For SPI NAND, first enable only MTD and SPI-NAND enumeration and verify
-the device geometry without erasing or formatting it. Add UBI and UBIFS only
-after the non-destructive detection test passes and the complete image still
-meets the 2,048,000-byte limit.
+Flash only after the image and DTB checks succeed:
+
+```sh
+make flash
+```
+
+Open the serial console on the host and reset the board:
+
+```sh
+picocom -b 115200 /dev/ttyACM0
+```
+
+Confirm that Linux reaches the interactive shell. After the 6.6.151 image has
+passed this boot test, save both active neutral files as the Linux 6.6.151
+snapshots:
+
+```sh
+make linux-6.6.151-savedefconfig
+```
+
+This copies `firmware/board/stm32f429disco/linux.config` and
+`firmware/configs/stm32f429disco.defconfig` to their versioned 6.6.151
+snapshot files. It does not regenerate either neutral file. If kernel
+menuconfig changes must be saved first, run `make linux-savedefconfig`; if
+Buildroot menuconfig changes must be saved first, run `make savedefconfig`.
+
+After the general image boots successfully, enable and test project examples
+separately from the kernel-version migration.
 
 ## 8. Repeat the procedure with the latest stable kernel
 
 Start this build only after the 6.6.151 general image has passed its serial boot
-test. Resolve the version again at the start of the build and keep that exact
-value for the complete test:
+test. Print the latest stable version published by kernel.org:
 
 ```sh
 cd /workspace
-LATEST_LINUX_VERSION=$(
-	curl -fsSL https://www.kernel.org/releases.json |
-	jq -er '.latest_stable.version'
-)
-echo "Building latest stable Linux ${LATEST_LINUX_VERSION}"
-test -n "${LATEST_LINUX_VERSION}"
+curl -fsSL https://www.kernel.org/releases.json | jq -r '.latest_stable.version'
 ```
+
+Write down the printed version and use that exact number for the complete
+build. The commands below use `7.1.8` as an example. If kernel.org printed a
+different version, replace `7.1.8` with that version.
 
 Clean the active 6.6.151 kernel before changing Buildroot configuration:
 
@@ -318,36 +342,22 @@ Clean the active 6.6.151 kernel before changing Buildroot configuration:
 make linux-dirclean
 ```
 
-Create a new patch directory from the reviewed 6.6.151 series. Never reuse or
-modify the 6.6.151 directory in place:
+Create a copy of the reviewed Linux 6.6.151 patch directory. For example, when
+the latest version is 7.1.8:
 
 ```sh
-SOURCE_PATCH_DIR=firmware/board/stm32f429disco/linux-patches/linux-6.6.151
-LATEST_PATCH_DIR="firmware/board/stm32f429disco/linux-patches/linux-${LATEST_LINUX_VERSION}"
-
-test -d "${SOURCE_PATCH_DIR}"
-test ! -e "${LATEST_PATCH_DIR}"
-cp -a "${SOURCE_PATCH_DIR}" "${LATEST_PATCH_DIR}"
+cp -a firmware/board/stm32f429disco/linux-patches/linux-6.6.151 \
+	firmware/board/stm32f429disco/linux-patches/linux-7.1.8
 ```
 
-Create an independent latest-kernel configuration from the reviewed 6.6.151
-configuration:
+Do not modify `linux-patches/linux-6.6.151` while adapting patches for the
+latest kernel.
 
-```sh
-SOURCE_KERNEL_CONFIG=firmware/board/stm32f429disco/linux-6.6.151.config
-LATEST_KERNEL_CONFIG="firmware/board/stm32f429disco/linux-${LATEST_LINUX_VERSION}.config"
-
-test -f "${SOURCE_KERNEL_CONFIG}"
-test ! -e "${LATEST_KERNEL_CONFIG}"
-cp -a "${SOURCE_KERNEL_CONFIG}" "${LATEST_KERNEL_CONFIG}"
-```
-
-Edit `firmware/configs/stm32f429disco.defconfig` and set the exact version and
-matching configuration path:
+Edit the version in `firmware/configs/stm32f429disco.defconfig`. For example:
 
 ```text
-BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="<LATEST_LINUX_VERSION>"
-BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="/workspace/firmware/board/stm32f429disco/linux-<LATEST_LINUX_VERSION>.config"
+BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="7.1.8"
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="/workspace/firmware/board/stm32f429disco/linux.config"
 ```
 
 Do not change this toolchain declaration merely because the runtime kernel is
@@ -372,77 +382,78 @@ Review every patch. Drop a patch from the latest-version directory only when
 the equivalent fix is demonstrably present upstream; otherwise adjust its new
 copy for changed context.
 
-For kernels using `arch/arm/boot/dts/st/`, add a latest-kernel compatibility
-block to `firmware/external.mk` while building the general image:
+Keep the custom board DTS unchanged. The copied patch series contains the DTS
+compatibility patch from section 4. Confirm that it still applies to the latest
+kernel and still points to the correct vendor-directory files.
 
-```make
-LINUX_DTS_NAME := $(filter-out stm32f429disco-custom,$(LINUX_DTS_NAME))
-LINUX_DTS_NAME += st/stm32f429disco-custom
-
-define STM32F429_COPY_DTS_TO_ST
-	$(INSTALL) -D -m 0644 \
-		$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/dts/stm32f429disco-custom.dts \
-		$(LINUX_ARCH_PATH)/boot/dts/st/stm32f429disco-custom.dts
-endef
-LINUX_PRE_BUILD_HOOKS += STM32F429_COPY_DTS_TO_ST
-```
-
-This block is not needed by Linux 6.1 or 6.6. Guard or remove it before
-rebuilding those versions.
-
-Build once to expose obsolete symbols and new defaults:
+Resolve the reviewed Linux 6.6 configuration against the latest kernel before
+the first full build:
 
 ```sh
-make build_all
+make linux-menuconfig
 ```
 
-If the build or size check fails, review the kernel configuration as described
-in section 5. In particular, newer kernels may require replacing
-`CONFIG_SLOB=y` with `CONFIG_SLUB_TINY=y`, enabling `CONFIG_EXPERT=y` and
-`CONFIG_BASE_SMALL=y`, and disabling unrelated new STM32MP defaults. Save every
-intentional change to its version-specific file, then clean and rebuild:
+Review the new and removed settings as described in section 5, save and exit
+the menu, and then save the latest configuration:
 
 ```sh
-make -C buildroot BR2_EXTERNAL=/workspace/firmware linux-savedefconfig
-cp "buildroot/output/build/linux-${LATEST_LINUX_VERSION}/defconfig" \
-	"firmware/board/stm32f429disco/linux-${LATEST_LINUX_VERSION}.config"
+make linux-savedefconfig
+```
+
+Only after resolving and saving the configuration, clean and perform the full
+build:
+
+```sh
 make linux-dirclean
 make build_all
 ```
 
-Verify the resolved source version, NAND entry, DTB, and XIP size:
+Verify the resolved source version and DTB:
 
 ```sh
 grep '^BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE=' buildroot/.config
-grep -n -A8 'W25N02KV' \
-	"buildroot/output/build/linux-${LATEST_LINUX_VERSION}/drivers/mtd/nand/spi/winbond.c"
-
 test -s buildroot/output/images/stm32f429disco-custom.dtb
-XIP_BYTES=$(stat -c %s buildroot/output/images/xipImage)
-XIP_MAX_BYTES=2048000
-echo "xipImage: ${XIP_BYTES}/${XIP_MAX_BYTES} bytes"
-test "${XIP_BYTES}" -le "${XIP_MAX_BYTES}"
 ```
 
-Do not flash an oversized latest kernel. A latest kernel that cannot retain
-enough headroom for the intended application is not a suitable target merely
-because it builds successfully.
+Repeat the image-size gate from section 7. Do not flash an oversized latest
+kernel. A latest kernel that cannot retain enough headroom for the intended
+application is not a suitable target merely because it builds successfully.
+If the image fits, repeat the flashing and host serial-console test from
+section 7.
+
+After the latest image passes its serial boot test, save a versioned copy of
+the active configuration. For example:
+
+```sh
+cp -a firmware/board/stm32f429disco/linux.config \
+	firmware/board/stm32f429disco/linux-7.1.8.config
+```
 
 ## 9. Roll back
 
-Clean the currently selected new kernel before changing the version back:
+### Roll back from Linux 6.6.151 to Linux 6.1.27
+
+Restore both Linux 6.1.27 snapshots to their active version-neutral names,
+reload the Buildroot configuration, and then remove any existing Linux 6.1.27
+build before rebuilding it:
 
 ```sh
+make linux-6.1.27-configure
 make linux-dirclean
-```
-
-Restore both the previous version and its matching custom kernel configuration
-path in `firmware/configs/stm32f429disco.defconfig`, then reload and rebuild:
-
-```sh
-make configure
 make build_all
 ```
 
+`make linux-6.1.27-configure` validates the two snapshot files before copying
+them and confirms that the versioned project defconfig selects Linux 6.1.27
+while still referring to the active `linux.config` filename.
+
 The old version-specific patch directory remains unchanged and will be selected
-automatically by `firmware/external.mk`.
+automatically by `firmware/external.mk`. The custom board DTS is unchanged;
+Linux 6.1 uses its native flat DTSI files and does not apply the Linux 6.6
+compatibility patch.
+
+### Roll back from the latest kernel to Linux 6.6.151
+
+Use the same sequence with `make linux-6.6.151-configure`. It restores both
+6.6.151 snapshots and lets the version-specific Linux 6.6.151 patch directory
+provide the DTS compatibility files.

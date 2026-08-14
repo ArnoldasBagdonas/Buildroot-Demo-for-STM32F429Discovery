@@ -22,6 +22,12 @@ DEFCONFIG_BUSYBOX   := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/busybox.config
 DEFCONFIG_UCLIBC    := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/uClibc-ng.config
 FLASH_SCRIPT        := $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/flash.sh
 
+# Linux-version snapshots. The active Buildroot and Linux files deliberately
+# keep version-neutral names; these files are copied in or out by the targets
+# in the "Linux Kernel config targets" section below.
+LINUX_CONFIG_SNAPSHOT     = $(BR2_EXTERNAL_DIR)/board/$(BOARD_NAME)/linux-$(LINUX_TARGET_VERSION).config
+LINUX_DEFCONFIG_SNAPSHOT  = $(BR2_EXTERNAL_DIR)/configs/linux-$(LINUX_TARGET_VERSION)-$(BOARD_NAME).defconfig
+
 # === Helpers ===
 MKDIR_P  := mkdir -p
 RM_F     := rm -f
@@ -169,14 +175,67 @@ uclibc-savedefconfig:
 # Linux Kernel config targets
 # -------------------------------------------------------------
 
-.PHONY: linux-menuconfig linux-savedefconfig
+.PHONY: linux-menuconfig linux-savedefconfig \
+	linux-6.1.27-configure linux-6.6.151-configure \
+	linux-6.1.27-savedefconfig linux-6.6.151-savedefconfig
+
+linux-6.1.27-configure linux-6.1.27-savedefconfig: LINUX_TARGET_VERSION := 6.1.27
+linux-6.6.151-configure linux-6.6.151-savedefconfig: LINUX_TARGET_VERSION := 6.6.151
+
+linux-6.1.27-configure linux-6.6.151-configure: buildroot
+	@set -eu; \
+	LINUX_CONFIG_SNAPSHOT="$(LINUX_CONFIG_SNAPSHOT)"; \
+	LINUX_DEFCONFIG_SNAPSHOT="$(LINUX_DEFCONFIG_SNAPSHOT)"; \
+	for SNAPSHOT in "$$LINUX_CONFIG_SNAPSHOT" "$$LINUX_DEFCONFIG_SNAPSHOT"; do \
+		if [ ! -f "$$SNAPSHOT" ]; then \
+			$(ECHO) "✖ Missing Linux $(LINUX_TARGET_VERSION) snapshot: $$SNAPSHOT" >&2; \
+			exit 1; \
+		fi; \
+	done; \
+	if ! grep -Fqx 'BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="$(LINUX_TARGET_VERSION)"' "$$LINUX_DEFCONFIG_SNAPSHOT"; then \
+		$(ECHO) "✖ $$LINUX_DEFCONFIG_SNAPSHOT does not select Linux $(LINUX_TARGET_VERSION)." >&2; \
+		exit 1; \
+	fi; \
+	if ! grep -Fqx 'BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(DEFCONFIG_LINUX)"' "$$LINUX_DEFCONFIG_SNAPSHOT"; then \
+		$(ECHO) "✖ $$LINUX_DEFCONFIG_SNAPSHOT must use the active version-neutral linux.config file." >&2; \
+		exit 1; \
+	fi; \
+	cp -f "$$LINUX_CONFIG_SNAPSHOT" "$(DEFCONFIG_LINUX)"; \
+	cp -f "$$LINUX_DEFCONFIG_SNAPSHOT" "$(DEFCONFIG_ALL)"; \
+	$(ECHO) "==> Restored Linux $(LINUX_TARGET_VERSION) configuration snapshots."; \
+	$(MAKE_BR) BR2_DEFCONFIG="$(DEFCONFIG_ALL)" defconfig; \
+	$(ECHO) "✔ Linux $(LINUX_TARGET_VERSION) is now the active configured version."
+
+linux-6.1.27-savedefconfig linux-6.6.151-savedefconfig:
+	@set -eu; \
+	for ACTIVE_CONFIG in "$(DEFCONFIG_LINUX)" "$(DEFCONFIG_ALL)"; do \
+		if [ ! -f "$$ACTIVE_CONFIG" ]; then \
+			$(ECHO) "✖ Missing active version-neutral config: $$ACTIVE_CONFIG" >&2; \
+			exit 1; \
+		fi; \
+	done; \
+	if ! grep -Fqx 'BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="$(LINUX_TARGET_VERSION)"' "$(DEFCONFIG_ALL)"; then \
+		$(ECHO) "✖ Active project defconfig does not select Linux $(LINUX_TARGET_VERSION)." >&2; \
+		$(ECHO) "  Run 'make linux-$(LINUX_TARGET_VERSION)-configure' first." >&2; \
+		exit 1; \
+	fi; \
+	if ! grep -Fqx 'BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(DEFCONFIG_LINUX)"' "$(DEFCONFIG_ALL)"; then \
+		$(ECHO) "✖ Active project defconfig does not use the version-neutral linux.config file." >&2; \
+		exit 1; \
+	fi; \
+	$(ECHO) "==> Saving the active neutral files as Linux $(LINUX_TARGET_VERSION) snapshots..."; \
+	cp -f "$(DEFCONFIG_LINUX)" "$(LINUX_CONFIG_SNAPSHOT)"; \
+	cp -f "$(DEFCONFIG_ALL)" "$(LINUX_DEFCONFIG_SNAPSHOT)"; \
+	$(ECHO) "✔ Updated Linux $(LINUX_TARGET_VERSION) snapshots:"; \
+	$(ECHO) "  $(LINUX_CONFIG_SNAPSHOT)"; \
+	$(ECHO) "  $(LINUX_DEFCONFIG_SNAPSHOT)"
+
 linux-menuconfig:
 	@$(MAKE_BR) linux-menuconfig
 	
 linux-savedefconfig:
 	@$(ECHO) "==> Saving Linux kernel config..."
-	@$(MAKE_BR) linux-savedefconfig
-	@cp $(BUILDROOT_DIR)/output/build/linux-*/defconfig $(DEFCONFIG_LINUX)
+	@$(MAKE_BR) linux-update-defconfig
 	$(ECHO) "✔ Linux kernel config saved to: $(DEFCONFIG_LINUX)"
 
 # -------------------------------------------------------------

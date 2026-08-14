@@ -1,0 +1,150 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Buildroot STM32F429 demo <noreply@example.com>
+Date: Thu, 13 Aug 2026 09:00:00 +0300
+Subject: [PATCH] net: wiznet: w5100: poll W5500 PHY link status
+
+The SPI binding cannot supply the legacy link GPIO, so the driver otherwise
+reports carrier permanently up. W5500 exposes the actual PHY link in bit 0
+of PHYCFGR. Poll it while the interface is running and keep netdev carrier
+state and ethtool get_link synchronized with the hardware.
+
+Signed-off-by: Buildroot STM32F429 demo <noreply@example.com>
+---
+ drivers/net/ethernet/wiznet/w5100.c | 61 ++++++++++++++++++++++++++++++-----
+ 1 file changed, 56 insertions(+), 5 deletions(-)
+
+--- a/drivers/net/ethernet/wiznet/w5100.c
++++ b/drivers/net/ethernet/wiznet/w5100.c
+@@ -127,6 +127,9 @@
+ #define W5500_SIMR		0x0018 /* Socket Interrupt Mask Register */
+ #define W5500_RTR		0x0019 /* Retry Time-value Register */
+ 
++#define W5500_PHYCFGR		0x002e /* PHY Configuration Register */
++#define   W5500_PHYCFGR_LNK_ON	BIT(0)
++
+ #define W5500_S0_REGS		0x10000
+ 
+ #define W5500_Sn_RXMEM_SIZE(n)	\
+@@ -170,6 +173,7 @@
+ 	struct work_struct tx_work;
+ 	struct work_struct setrx_work;
+ 	struct work_struct restart_work;
++	struct delayed_work link_work;
+ };
+ 
+ /************************************************************************
+@@ -725,6 +729,18 @@
+ 		sizeof(info->bus_info));
+ }
+ 
++static bool w5100_link_is_up(struct w5100_priv *priv)
++{
++	int phy_config;
++
++	if (gpio_is_valid(priv->link_gpio))
++		return gpio_get_value(priv->link_gpio) != 0;
++	if (priv->ops->chip_id != W5500)
++		return true;
++	phy_config = w5100_read(priv, W5500_PHYCFGR);
++	return phy_config >= 0 && (phy_config & W5500_PHYCFGR_LNK_ON);
++}
++
+ static u32 w5100_get_link(struct net_device *ndev)
+ {
+ 	struct w5100_priv *priv = netdev_priv(ndev);
+@@ -732,7 +748,28 @@
+ 	if (gpio_is_valid(priv->link_gpio))
+ 		return !!gpio_get_value(priv->link_gpio);
+ 
+-	return 1;
++	return w5100_link_is_up(priv);
++}
++
++static void w5100_link_work(struct work_struct *work)
++{
++	struct w5100_priv *priv = container_of(to_delayed_work(work),
++					       struct w5100_priv, link_work);
++	struct net_device *ndev = priv->ndev;
++	bool link_up;
++
++	if (!netif_running(ndev))
++		return;
++	link_up = w5100_link_is_up(priv);
++	if (link_up != netif_carrier_ok(ndev)) {
++		netif_info(priv, link, ndev, "link is %s\n",
++			   link_up ? "up" : "down");
++		if (link_up)
++			netif_carrier_on(ndev);
++		else
++			netif_carrier_off(ndev);
++	}
++	schedule_delayed_work(&priv->link_work, HZ);
+ }
+ 
+ static u32 w5100_get_msglevel(struct net_device *ndev)
+@@ -998,9 +1035,13 @@
+ 	w5100_hw_start(priv);
+ 	napi_enable(&priv->napi);
+ 	netif_start_queue(ndev);
+-	if (!gpio_is_valid(priv->link_gpio) ||
+-	    gpio_get_value(priv->link_gpio) != 0)
++	if (w5100_link_is_up(priv))
+ 		netif_carrier_on(ndev);
++	else
++		netif_carrier_off(ndev);
++	if (!gpio_is_valid(priv->link_gpio) &&
++	    priv->ops->chip_id == W5500)
++		schedule_delayed_work(&priv->link_work, HZ);
+ 	return 0;
+ }
+ 
+@@ -1008,6 +1049,8 @@
+ {
+ 	struct w5100_priv *priv = netdev_priv(ndev);
+ 
++	if (priv->ops->chip_id == W5500)
++		cancel_delayed_work_sync(&priv->link_work);
+ 	netif_info(priv, ifdown, ndev, "shutting down\n");
+ 	w5100_hw_close(priv);
+ 	netif_carrier_off(ndev);
+@@ -1134,6 +1177,7 @@
+ 	ndev->netdev_ops = &w5100_netdev_ops;
+ 	ndev->ethtool_ops = &w5100_ethtool_ops;
+ 	netif_napi_add_weight(ndev, &priv->napi, w5100_napi_poll, 16);
++	INIT_DELAYED_WORK(&priv->link_work, w5100_link_work);
+ 
+ 	/* This chip doesn't support VLAN packets with normal MTU,
+ 	 * so disable VLAN for this device.
+@@ -1217,6 +1261,7 @@
+ 	struct net_device *ndev = dev_get_drvdata(dev);
+ 	struct w5100_priv *priv = netdev_priv(ndev);
+ 
++	cancel_delayed_work_sync(&priv->link_work);
+ 	w5100_hw_reset(priv);
+ 	free_irq(priv->irq, ndev);
+ 	if (gpio_is_valid(priv->link_gpio))
+@@ -1238,6 +1283,8 @@
+ 	struct w5100_priv *priv = netdev_priv(ndev);
+ 
+ 	if (netif_running(ndev)) {
++		if (priv->ops->chip_id == W5500)
++			cancel_delayed_work_sync(&priv->link_work);
+ 		netif_carrier_off(ndev);
+ 		netif_device_detach(ndev);
+ 
+@@ -1256,9 +1303,13 @@
+ 		w5100_hw_start(priv);
+ 
+ 		netif_device_attach(ndev);
+-		if (!gpio_is_valid(priv->link_gpio) ||
+-		    gpio_get_value(priv->link_gpio) != 0)
++		if (w5100_link_is_up(priv))
+ 			netif_carrier_on(ndev);
++		else
++			netif_carrier_off(ndev);
++		if (!gpio_is_valid(priv->link_gpio) &&
++		    priv->ops->chip_id == W5500)
++			schedule_delayed_work(&priv->link_work, HZ);
+ 	}
+ 	return 0;
+ }
