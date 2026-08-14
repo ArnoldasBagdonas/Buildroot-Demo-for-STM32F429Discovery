@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -eu
+set -e
 
 if [ ! -r /var/run/find-my-device.pid ]; then
 	echo "find-my-device is not running" >&2

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -u
+set -e
 
 if [ -r /etc/find-my-device.conf ]; then
 	. /etc/find-my-device.conf
@@ -11,40 +11,63 @@ FMD_HTTP_PORT=${FMD_HTTP_PORT:-8080}
 FMD_DEVICE_NAME=${FMD_DEVICE_NAME:-My Finder}
 FMD_DEVICE_MODEL=${FMD_DEVICE_MODEL:-FINDER-R01}
 FMD_STATE_FILE=${FMD_STATE_FILE:-/var/lib/find-my-device/state}
-FMD_BUTTON_CHIP=${FMD_BUTTON_CHIP:-/dev/gpiochip2}
-FMD_BUTTON_LINE=${FMD_BUTTON_LINE:-13}
+FMD_BUTTON_CHIP=${FMD_BUTTON_CHIP:-/dev/gpiochip0}
+FMD_BUTTON_LINE=${FMD_BUTTON_LINE:-0}
+FMD_BUTTON_ACTIVE_LOW=${FMD_BUTTON_ACTIVE_LOW:-no}
 FMD_LED_CHIP=${FMD_LED_CHIP:-/dev/gpiochip6}
-FMD_LED_LINE=${FMD_LED_LINE:-9}
+FMD_LED_LINE=${FMD_LED_LINE:-13}
 FMD_GPIO_ENABLED=${FMD_GPIO_ENABLED:-yes}
+FMD_DHCP_WAIT=${FMD_DHCP_WAIT:-30}
 
 mkdir -p /var/lib/find-my-device /var/run
 
 # SPI Ethernet probes asynchronously. Give it a short bounded wait so a
 # missing or miswired module never prevents the console shell from starting.
 FMD_WAIT=0
+# BusyBox hush incorrectly applies `set -e` to the final false condition of
+# these bounded waits, so disable it only while waiting.
+set +e
 while [ ! -d "/sys/class/net/${FMD_INTERFACE}" ] && [ "${FMD_WAIT}" -lt 10 ]; do
 	sleep 1
 	FMD_WAIT=$((FMD_WAIT + 1))
 done
+set -e
 if [ ! -d "/sys/class/net/${FMD_INTERFACE}" ]; then
 	echo "find-my-device: ${FMD_INTERFACE} was not created; check W5500 wiring and the boot log" >&2
 	exit 1
 fi
 
-FMD_MAC_RESULT=$(/usr/bin/find-my-device \
-	--interface "${FMD_INTERFACE}" --prepare-interface 2>&1)
-if [ "$?" -ne 0 ]; then
+if ! FMD_MAC_RESULT=$(/usr/bin/find-my-device \
+	--interface "${FMD_INTERFACE}" --prepare-interface 2>&1); then
 	echo "find-my-device: ${FMD_MAC_RESULT}" >&2
 	exit 1
 fi
 echo "${FMD_MAC_RESULT}"
 
 ifconfig "${FMD_INTERFACE}" up
-if ! udhcpc -i "${FMD_INTERFACE}" -s /usr/share/find-my-device/udhcpc.script \
-	-n -q -t 4 -T 2; then
+
+FMD_MAC=${FMD_MAC_RESULT#*=}
+# Use an opaque, deterministic client identifier distinct from BusyBox's
+# default type-1 MAC identifier. This survives reboot while avoiding stale
+# leases left by older images which used the default identifier.
+FMD_DHCP_CLIENT_ID="00${FMD_MAC//:/}"
+: > /var/run/find-my-device.ipv4
+# Keep udhcpc alive so it renews leases and retries after a late cable insert.
+# -f prevents its no-MMU daemon re-exec; the shell backgrounds it explicitly.
+udhcpc -f -i "${FMD_INTERFACE}" -s /usr/share/find-my-device/udhcpc.script \
+	-x "0x3d:${FMD_DHCP_CLIENT_ID}" -t 4 -T 2 -A 5 &
+echo $! > /var/run/find-my-device.udhcpc.pid
+
+FMD_WAIT=0
+set +e
+while [ ! -s /var/run/find-my-device.ipv4 ] && [ "${FMD_WAIT}" -lt "${FMD_DHCP_WAIT}" ]; do
+	sleep 1
+	FMD_WAIT=$((FMD_WAIT + 1))
+done
+set -e
+if [ ! -s /var/run/find-my-device.ipv4 ]; then
 	# A deterministic RFC 3927 address keeps direct-cable and isolated-switch
-	# testing useful when no DHCP server is present.
-	FMD_MAC=${FMD_MAC_RESULT#*=}
+	# testing useful while the persistent DHCP client continues retrying.
 	FMD_OLD_IFS=${IFS}
 	IFS=:
 	set -- ${FMD_MAC}
@@ -63,6 +86,9 @@ fi
 FMD_GPIO_ARGS="--no-gpio"
 if [ "${FMD_GPIO_ENABLED}" = yes ]; then
 	FMD_GPIO_ARGS="--button-chip ${FMD_BUTTON_CHIP} --button-line ${FMD_BUTTON_LINE} --led-chip ${FMD_LED_CHIP} --led-line ${FMD_LED_LINE}"
+	if [ "${FMD_BUTTON_ACTIVE_LOW}" = yes ]; then
+		FMD_GPIO_ARGS="${FMD_GPIO_ARGS} --button-active-low"
+	fi
 fi
 
 echo $$ > /var/run/find-my-device.pid

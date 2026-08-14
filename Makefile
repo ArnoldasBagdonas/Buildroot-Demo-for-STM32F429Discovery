@@ -133,7 +133,7 @@ distclean:
 	@$(MAKE_BR) distclean
 
 .PHONY: flash
-flash: check-example-conflicts
+flash:
 	@bash $(FLASH_SCRIPT) $(BUILDROOT_DIR)/output $(BOARD_NAME)
 
 # -------------------------------------------------------------

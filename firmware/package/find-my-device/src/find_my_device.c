@@ -24,7 +24,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/sysinfo.h>
-#include <sys/time.h>
+#include <sys/timerfd.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
@@ -33,10 +33,10 @@
 #define DEFAULT_MODEL "FINDER-R01"
 #define DEFAULT_NAME "My Finder"
 #define DEFAULT_STATE_FILE "/var/lib/find-my-device/state"
-#define DEFAULT_BUTTON_CHIP "/dev/gpiochip2"
+#define DEFAULT_BUTTON_CHIP "/dev/gpiochip0"
 #define DEFAULT_LED_CHIP "/dev/gpiochip6"
-#define DEFAULT_BUTTON_LINE 13U /* PC13, external active-low push button */
-#define DEFAULT_LED_LINE 9U     /* PG9, external active-high LED */
+#define DEFAULT_BUTTON_LINE 0U  /* PA0, on-board blue USER button */
+#define DEFAULT_LED_LINE 13U    /* PG13, on-board green LED */
 #define DEFAULT_HTTP_PORT 8080U
 #define HTTP_BUFFER_BYTES 4096U
 #define MDNS_BUFFER_BYTES 768U
@@ -44,6 +44,9 @@
 #define MDNS_GROUP "224.0.0.251"
 #define STATE_MAGIC UINT32_C(0x464d4433) /* FMD3 */
 #define STATE_VERSION 1U
+#define LED_FLASH_MS UINT64_C(200)
+#define LED_PATTERN_PAUSE_MS UINT64_C(1200)
+#define SERVICE_TICK_NS 50000000L
 
 typedef struct
 {
@@ -56,6 +59,7 @@ typedef struct
     uint16_t port;
     unsigned int button_line;
     unsigned int led_line;
+    bool button_active_low;
     bool gpio_enabled;
     bool prepare_interface;
     bool device_id_override_set;
@@ -80,6 +84,10 @@ typedef struct
     unsigned int flash_toggles;
     bool flash_level;
     uint64_t flash_next_ms;
+    unsigned int confirmation_flashes;
+    unsigned int confirmation_flashes_completed;
+    bool confirmation_level;
+    uint64_t confirmation_next_ms;
     bool link_up;
 } PlatformControls;
 
@@ -97,6 +105,7 @@ typedef struct
     struct in_addr address;
     int http_socket;
     int mdns_socket;
+    int service_timer_fd;
     int websocket_socket;
     uint32_t websocket_counter;
     uint64_t websocket_next_ms;
@@ -107,13 +116,34 @@ typedef struct
 
 static volatile sig_atomic_t stop_requested;
 static volatile sig_atomic_t confirm_requested;
+static volatile sig_atomic_t address_reload_requested;
 
 static void handle_signal(int signal_number)
 {
     if (signal_number == SIGUSR1)
         confirm_requested = 1;
-    else
+    else if (signal_number == SIGHUP)
+        address_reload_requested = 1;
+    else if (signal_number == SIGINT || signal_number == SIGTERM)
         stop_requested = 1;
+}
+
+static int create_service_timer(void)
+{
+    struct itimerspec timer;
+    int descriptor = timerfd_create(CLOCK_MONOTONIC, 0);
+    if (descriptor < 0)
+        return -1;
+
+    memset(&timer, 0, sizeof(timer));
+    timer.it_interval.tv_nsec = SERVICE_TICK_NS;
+    timer.it_value = timer.it_interval;
+    if (timerfd_settime(descriptor, 0, &timer, NULL) != 0)
+    {
+        close(descriptor);
+        return -1;
+    }
+    return descriptor;
 }
 
 static uint64_t monotonic_ms(void)
@@ -178,10 +208,11 @@ static void usage(const char *program)
             "  --model MODEL          product model\n"
             "  --address IPV4         address override for host tests\n"
             "  --device-id HEX16      identity override for host tests\n"
-            "  --button-chip PATH     GPIO chip for active-low confirmation\n"
-            "  --button-line OFFSET   GPIO line (default PC13)\n"
+            "  --button-chip PATH     GPIO chip for physical confirmation\n"
+            "  --button-line OFFSET   GPIO line (default PA0)\n"
+            "  --button-active-low    button is pressed at logic low\n"
             "  --led-chip PATH        GPIO chip for active-high status LED\n"
-            "  --led-line OFFSET      GPIO line (default PG9)\n"
+            "  --led-line OFFSET      GPIO line (default PG13)\n"
             "  --no-gpio              use SIGUSR1 confirmation only\n"
             "  --prepare-interface    set the stable MAC and exit\n",
             program);
@@ -208,6 +239,8 @@ static bool parse_options(int argc, char **argv, Options *options, const char **
         const char *argument = index + 1 < argc ? argv[index + 1] : NULL;
         if (strcmp(option, "--no-gpio") == 0)
             options->gpio_enabled = false;
+        else if (strcmp(option, "--button-active-low") == 0)
+            options->button_active_low = true;
         else if (strcmp(option, "--prepare-interface") == 0)
             options->prepare_interface = true;
         else if (strcmp(option, "--help") == 0)
@@ -328,6 +361,7 @@ static bool read_stm32_uid(uint8_t uid[12])
 {
     const char *override = getenv("FMD_UID_PATH");
     const char *root = "/sys/bus/nvmem/devices";
+    const char provider_prefix[] = "stm32-romem";
     DIR *directory;
     struct dirent *entry;
     char path[384];
@@ -340,7 +374,7 @@ static bool read_stm32_uid(uint8_t uid[12])
     while ((entry = readdir(directory)) != NULL)
     {
         int length;
-        if (strncmp(entry->d_name, "stm32-romem", 12U) != 0)
+        if (strncmp(entry->d_name, provider_prefix, sizeof(provider_prefix) - 1U) != 0)
             continue;
         length = snprintf(path, sizeof(path), "%s/%s/nvmem", root, entry->d_name);
         if (length <= 0 || (size_t)length >= sizeof(path))
@@ -603,7 +637,10 @@ static void controls_init(Application *application)
         return;
     controls->button_fd = request_gpio_line(
         application->options.button_chip, application->options.button_line,
-        GPIO_V2_LINE_FLAG_INPUT | GPIO_V2_LINE_FLAG_BIAS_PULL_UP, "find-my-device-button");
+        GPIO_V2_LINE_FLAG_INPUT |
+            (application->options.button_active_low ? GPIO_V2_LINE_FLAG_BIAS_PULL_UP
+                                                    : GPIO_V2_LINE_FLAG_BIAS_PULL_DOWN),
+        "find-my-device-button");
     if (controls->button_fd < 0)
         fprintf(stderr, "find_my_device_button_unavailable chip=%s line=%u error=%s\n",
                 application->options.button_chip, application->options.button_line,
@@ -637,9 +674,28 @@ static bool interface_link_up(const char *interface_name)
 
 static void trigger_flashes(Application *application, unsigned int count)
 {
-    application->controls.flash_toggles = count * 2U;
-    application->controls.flash_level = false;
+    PlatformControls *controls = &application->controls;
+    if (count == 0U)
+        return;
+    controls->flash_toggles = count * 2U;
+    controls->flash_level =
+        controls->confirmation_flashes != 0U ? controls->confirmation_level : controls->link_up;
     application->controls.flash_next_ms = monotonic_ms();
+}
+
+static void set_confirmation_pattern(Application *application, unsigned int flashes)
+{
+    PlatformControls *controls = &application->controls;
+    controls->confirmation_flashes = flashes;
+    controls->confirmation_flashes_completed = 0U;
+    controls->confirmation_level = flashes != 0U ? true : controls->link_up;
+    controls->confirmation_next_ms = monotonic_ms() + LED_FLASH_MS;
+    controls->flash_toggles = 0U;
+    if (controls->led_fd >= 0)
+        (void)gpio_write(controls->led_fd, controls->confirmation_level);
+    printf("find_my_device_confirmation_pattern=%s\n",
+           flashes == 1U ? "one-flash" : flashes == 2U ? "two-flash" : "idle");
+    fflush(stdout);
 }
 
 static void confirm_physical(Application *application)
@@ -649,7 +705,7 @@ static void confirm_physical(Application *application)
     oauth_confirm_physical(&application->oauth);
     if (application->oauth.physical_confirmed)
     {
-        trigger_flashes(application, 2U);
+        set_confirmation_pattern(application, 2U);
         fputs("find_my_device_physical_confirmation=accepted\n", stdout);
         fflush(stdout);
     }
@@ -660,6 +716,7 @@ static void controls_service(Application *application)
     PlatformControls *controls = &application->controls;
     uint64_t now = monotonic_ms();
     bool button_high;
+    bool button_pressed;
     bool link_up = interface_link_up(application->options.interface_name);
     if (link_up != controls->link_up)
     {
@@ -668,32 +725,58 @@ static void controls_service(Application *application)
     }
     if (controls->button_fd >= 0 && gpio_read(controls->button_fd, &button_high))
     {
-        if (button_high == controls->button_last)
+        button_pressed = application->options.button_active_low ? !button_high : button_high;
+        if (button_pressed == controls->button_last)
             controls->button_stable_count++;
         else
         {
-            controls->button_last = button_high;
+            controls->button_last = button_pressed;
             controls->button_stable_count = 1U;
         }
-        if (!button_high && controls->button_stable_count == 2U)
+        if (button_pressed && controls->button_stable_count == 2U)
             confirm_physical(application);
     }
     if (controls->led_fd < 0)
         return;
-    if (controls->flash_toggles != 0U && now >= controls->flash_next_ms)
+    if (controls->flash_toggles != 0U)
     {
-        controls->flash_level = !controls->flash_level;
-        controls->flash_toggles--;
-        controls->flash_next_ms = now + 180U;
-        (void)gpio_write(controls->led_fd, controls->flash_level);
+        if (now >= controls->flash_next_ms)
+        {
+            controls->flash_level = !controls->flash_level;
+            controls->flash_toggles--;
+            controls->flash_next_ms = now + LED_FLASH_MS;
+            (void)gpio_write(controls->led_fd, controls->flash_level);
+        }
+        return;
     }
-    else if (controls->flash_toggles == 0U)
+    if (controls->confirmation_flashes != 0U)
     {
-        bool level = controls->link_up;
-        if (!controls->link_up)
-            level = (now / 500U) % 2U != 0U;
-        (void)gpio_write(controls->led_fd, level);
+        if (now >= controls->confirmation_next_ms)
+        {
+            if (controls->confirmation_level)
+            {
+                controls->confirmation_level = false;
+                controls->confirmation_flashes_completed++;
+                controls->confirmation_next_ms =
+                    now + (controls->confirmation_flashes_completed >=
+                                   controls->confirmation_flashes
+                               ? LED_PATTERN_PAUSE_MS
+                               : LED_FLASH_MS);
+            }
+            else
+            {
+                if (controls->confirmation_flashes_completed >=
+                    controls->confirmation_flashes)
+                    controls->confirmation_flashes_completed = 0U;
+                controls->confirmation_level = true;
+                controls->confirmation_next_ms = now + LED_FLASH_MS;
+            }
+            (void)gpio_write(controls->led_fd, controls->confirmation_level);
+        }
+        return;
     }
+    (void)gpio_write(controls->led_fd,
+                     controls->link_up ? true : (now / 500U) % 2U != 0U);
 }
 
 static bool send_all(int descriptor, const void *data_value, size_t length)
@@ -1163,7 +1246,7 @@ static bool serve_client(Application *application, int client)
         OAuthResponse oauth_response;
         oauth_authorize(&application->oauth, query, application->device_name, &oauth_response);
         if (oauth_response.status == 200)
-            trigger_flashes(application, 1U);
+            set_confirmation_pattern(application, 1U);
         send_http(client, oauth_response.status, oauth_response.content_type,
                   oauth_response.location, oauth_response.body, oauth_response.body_length);
         return false;
@@ -1183,8 +1266,12 @@ static bool serve_client(Application *application, int client)
         OAuthResponse oauth_response;
         size_t form_length = (size_t)received - (size_t)(body - request);
         if (strcmp(target, "/auth/decision") == 0)
+        {
             oauth_decide(&application->oauth, body, form_length, now_seconds(application),
                          &oauth_response);
+            if (!application->oauth.confirmation_waiting)
+                set_confirmation_pattern(application, 0U);
+        }
         else
             oauth_token(&application->oauth, body, form_length, now_seconds(application),
                         &oauth_response);
@@ -1388,6 +1475,32 @@ static void mdns_receive(Application *application)
     }
 }
 
+static void reload_interface_address(Application *application)
+{
+    struct in_addr address;
+    char printable[INET_ADDRSTRLEN];
+    int descriptor;
+
+    if (!get_interface_address(&application->options, &address) ||
+        address.s_addr == application->address.s_addr)
+        return;
+    descriptor = create_mdns_socket(&address);
+    if (descriptor < 0)
+    {
+        perror("find-my-device mDNS address reload");
+        return;
+    }
+    mdns_announce(application, 0U);
+    close(application->mdns_socket);
+    application->mdns_socket = descriptor;
+    application->address = address;
+    memcpy(application->mdns.ipv4, &address.s_addr, sizeof(application->mdns.ipv4));
+    application->announce_now = true;
+    if (inet_ntop(AF_INET, &address, printable, sizeof(printable)) != NULL)
+        printf("find_my_device_ipv4=%s source=dhcp-update\n", printable);
+    fflush(stdout);
+}
+
 static int application_run(Application *application)
 {
     uint64_t next_announcement = 0U;
@@ -1395,10 +1508,18 @@ static int application_run(Application *application)
     controls_init(application);
     application->http_socket = create_http_socket(application->options.port);
     application->mdns_socket = create_mdns_socket(&application->address);
+    application->service_timer_fd = create_service_timer();
     application->websocket_socket = -1;
-    if (application->http_socket < 0 || application->mdns_socket < 0)
+    if (application->http_socket < 0 || application->mdns_socket < 0 ||
+        application->service_timer_fd < 0)
     {
         perror("find-my-device sockets");
+        if (application->http_socket >= 0)
+            close(application->http_socket);
+        if (application->mdns_socket >= 0)
+            close(application->mdns_socket);
+        if (application->service_timer_fd >= 0)
+            close(application->service_timer_fd);
         return 1;
     }
     printf("device_info_ready port=%u device_id=%s\n", application->options.port,
@@ -1407,8 +1528,8 @@ static int application_run(Application *application)
     fflush(stdout);
     while (!stop_requested)
     {
-        struct pollfd descriptors[3];
-        nfds_t count = 2U;
+        struct pollfd descriptors[4];
+        nfds_t count = 3U;
         int result;
         uint64_t now = monotonic_ms();
         descriptors[0].fd = application->http_socket;
@@ -1417,12 +1538,15 @@ static int application_run(Application *application)
         descriptors[1].fd = application->mdns_socket;
         descriptors[1].events = POLLIN;
         descriptors[1].revents = 0;
+        descriptors[2].fd = application->service_timer_fd;
+        descriptors[2].events = POLLIN;
+        descriptors[2].revents = 0;
         if (application->websocket_socket >= 0)
         {
-            descriptors[2].fd = application->websocket_socket;
-            descriptors[2].events = POLLERR | POLLHUP;
-            descriptors[2].revents = 0;
-            count = 3U;
+            descriptors[3].fd = application->websocket_socket;
+            descriptors[3].events = POLLERR | POLLHUP;
+            descriptors[3].revents = 0;
+            count = 4U;
         }
         result = poll(descriptors, count, 50);
         if (result < 0 && errno != EINTR)
@@ -1442,7 +1566,12 @@ static int application_run(Application *application)
         }
         if (descriptors[1].revents & POLLIN)
             mdns_receive(application);
-        if (count == 3U && (descriptors[2].revents & (POLLERR | POLLHUP)))
+        if (descriptors[2].revents & POLLIN)
+        {
+            uint64_t expirations;
+            (void)read(application->service_timer_fd, &expirations, sizeof(expirations));
+        }
+        if (count == 4U && (descriptors[3].revents & (POLLERR | POLLHUP)))
         {
             close(application->websocket_socket);
             application->websocket_socket = -1;
@@ -1451,6 +1580,11 @@ static int application_run(Application *application)
         {
             confirm_requested = 0;
             confirm_physical(application);
+        }
+        if (address_reload_requested)
+        {
+            address_reload_requested = 0;
+            reload_interface_address(application);
         }
         controls_service(application);
         service_websocket(application);
@@ -1472,6 +1606,7 @@ static int application_run(Application *application)
         close(application->websocket_socket);
     close(application->http_socket);
     close(application->mdns_socket);
+    close(application->service_timer_fd);
     if (application->controls.button_fd >= 0)
         close(application->controls.button_fd);
     if (application->controls.led_fd >= 0)
@@ -1491,6 +1626,7 @@ int main(int argc, char **argv)
     memset(&application, 0, sizeof(application));
     application.http_socket = -1;
     application.mdns_socket = -1;
+    application.service_timer_fd = -1;
     application.websocket_socket = -1;
     if (!parse_options(argc, argv, &application.options, &initial_name))
     {
@@ -1548,6 +1684,7 @@ int main(int argc, char **argv)
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
     signal(SIGUSR1, handle_signal);
+    signal(SIGHUP, handle_signal);
     signal(SIGPIPE, SIG_IGN);
     return application_run(&application);
 }

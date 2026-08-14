@@ -9,6 +9,9 @@ FIND_MY_DEVICE_SITE = $(BR2_EXTERNAL_FIRMWARE_PATH)/package/find-my-device
 FIND_MY_DEVICE_SITE_METHOD = local
 FIND_MY_DEVICE_LICENSE = MIT
 FIND_MY_DEVICE_LICENSE_FILES = LICENSE
+# main/application_run plus the HTTP/WebSocket request path requires about
+# 12 KiB before libc and signal frames. The bFLT default is only 4 KiB.
+FIND_MY_DEVICE_FLAT_STACKSIZE = 32768
 
 ifeq ($(BR2_PACKAGE_FIND_MY_DEVICE),y)
 LINUX_KCONFIG_FRAGMENT_FILES += \
@@ -46,8 +49,8 @@ define FIND_MY_DEVICE_BUILD_CMDS
 	$(TARGET_MAKE_ENV) $(MAKE) -C $(@D)/src \
 		CC="$(TARGET_CC)" \
 		CPPFLAGS="$(TARGET_CPPFLAGS)" \
-		CFLAGS="$(TARGET_CFLAGS) -ffunction-sections -fdata-sections" \
-		LDFLAGS="$(TARGET_LDFLAGS) -Wl,--gc-sections"
+		CFLAGS='$(TARGET_CFLAGS) -ffunction-sections -fdata-sections' \
+		LDFLAGS='$(TARGET_LDFLAGS) -Wl,--gc-sections'
 endef
 
 define FIND_MY_DEVICE_INSTALL_TARGET_CMDS

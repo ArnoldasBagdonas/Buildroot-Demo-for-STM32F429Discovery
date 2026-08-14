@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Buildroot STM32F429 demo <noreply@example.com>
+Date: Thu, 13 Aug 2026 22:00:00 +0300
+Subject: [PATCH] net: wiznet: w5100: stabilize W5500 receive size
+
+W5500 updates Sn_RX_RSR asynchronously.  Its datasheet requires software to
+read the register repeatedly until two consecutive values agree.  Under the
+authorization page's periodic HTTP requests, a torn size can make the MACRAW
+header appear to describe a 64 KiB frame.  The driver then advances the ring
+incorrectly and the interface stops receiving even though carrier remains up.
+
+Use the documented stable-read sequence for W5500 and reject packet lengths
+which do not fit both the available data and the configured receive buffer.
+
+Signed-off-by: Buildroot STM32F429 demo <noreply@example.com>
+---
+ drivers/net/ethernet/wiznet/w5100.c | 37 ++++++++++++++++++++++++++---
+ 1 file changed, 34 insertions(+), 3 deletions(-)
+
+--- a/drivers/net/ethernet/wiznet/w5100.c
++++ b/drivers/net/ethernet/wiznet/w5100.c
+@@ -899,21 +899,52 @@ static netdev_tx_t w5100_start_tx(struct sk_buff *skb, struct net_device *ndev)
+ 	return NETDEV_TX_OK;
+ }
+ 
++static int w5100_read_rx_size(struct w5100_priv *priv)
++{
++	int previous, current_value;
++	unsigned int attempts;
++
++	previous = w5100_read16(priv, W5100_S0_RX_RSR(priv));
++	if (priv->ops->chip_id != W5500 || previous <= 0)
++		return previous;
++
++	for (attempts = 0; attempts < 8; attempts++) {
++		current_value = w5100_read16(priv, W5100_S0_RX_RSR(priv));
++		if (current_value < 0)
++			return current_value;
++		if (current_value == previous)
++			return current_value;
++		previous = current_value;
++	}
++
++	return 0;
++}
++
+ static struct sk_buff *w5100_rx_skb(struct net_device *ndev)
+ {
+ 	struct w5100_priv *priv = netdev_priv(ndev);
+ 	struct sk_buff *skb;
++	u16 packet_len;
+ 	u16 rx_len;
+ 	u16 offset;
+ 	u8 header[2];
+-	u16 rx_buf_len = w5100_read16(priv, W5100_S0_RX_RSR(priv));
++	int rx_buf_len = w5100_read_rx_size(priv);
+ 
+-	if (rx_buf_len == 0)
++	if (rx_buf_len <= 0)
+ 		return NULL;
+ 
+ 	offset = w5100_read16(priv, W5100_S0_RX_RD(priv));
+ 	w5100_readbuf(priv, offset, header, 2);
+-	rx_len = get_unaligned_be16(header) - 2;
++	packet_len = get_unaligned_be16(header);
++	if (packet_len < 2 || packet_len > rx_buf_len ||
++	    packet_len > priv->s0_rx_buf_size) {
++		w5100_write16(priv, W5100_S0_RX_RD(priv), offset + rx_buf_len);
++		w5100_command(priv, S0_CR_RECV);
++		ndev->stats.rx_length_errors++;
++		ndev->stats.rx_dropped++;
++		return NULL;
++	}
++	rx_len = packet_len - 2;
+ 
+ 	skb = netdev_alloc_skb_ip_align(ndev, rx_len);
+ 	if (unlikely(!skb)) {
+-- 
+2.50.1

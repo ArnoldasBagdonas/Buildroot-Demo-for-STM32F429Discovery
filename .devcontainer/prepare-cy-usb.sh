@@ -80,8 +80,29 @@ fi
 # Remove the driver's overly broad claim, then let the adapter's CDC ACM
 # interface bind to the correct driver.  modprobe -r is harmless when cytherm
 # has no users other than this connected adapter.
-run_privileged modprobe -r cytherm
-run_privileged modprobe cdc_acm
+if [[ -d /sys/module/cytherm ]]; then
+    run_privileged modprobe -r cytherm
+fi
+if [[ ! -d /sys/module/cdc_acm ]]; then
+    run_privileged modprobe cdc_acm
+fi
+
+# cdc_acm may already have been loaded while cytherm owned the interfaces. In
+# that case modprobe succeeds without registering a new driver, and the newly
+# released interfaces are not reprobed automatically. Bind only the CDC
+# control interface of each matching Cypress adapter; cdc_acm claims its paired
+# data interface from the union descriptor.
+for sysfs_device in "${cypress_devices[@]}"; do
+    device_name="${sysfs_device##*/}"
+    for interface_path in "$SYSFS_USB_ROOT/$device_name":*; do
+        [[ -f "$interface_path/bInterfaceClass" ]] || continue
+        read -r interface_class < "$interface_path/bInterfaceClass"
+        [[ "${interface_class,,}" == "02" ]] || continue
+        [[ -L "$interface_path/driver" ]] && continue
+        printf '%s' "${interface_path##*/}" | \
+            run_privileged tee /sys/bus/usb/drivers/cdc_acm/bind >/dev/null
+    done
+done
 
 # Give udev a chance to finish creating the character device without making
 # udevadm a hard dependency of the host environment.

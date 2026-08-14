@@ -11,7 +11,7 @@ FreeRTOS `find-my-device` project next to this repository. It provides:
 - API v3 device information, OAuth authorization-code + PKCE, physical
   confirmation, refresh-token rotation, renaming, mobile registration, and
   authenticated WebSocket status events;
-- optional external confirmation button and status LED controls.
+- on-board USER-button confirmation and green status-LED controls.
 
 ## W5500 wiring
 
@@ -51,24 +51,24 @@ on their current peripherals:
 | UART examples | UART5 PC12/PD2 and RS-485 DE PD4 |
 | I2C example | I2C3 PA8/PC9 |
 | PWM example | PB4 |
-| GPIO examples | PA0, PG13, PG14 |
+| GPIO examples | PG14 (PA0 and PG13 are reserved by this example) |
 
 The UART examples now use PC12/PD2, so they can run alongside both the display
 and W5500. Four W5500 DTBs cover the minimal, display, USB, and USB+display
 selections; UART5 is present in their shared base device tree.
 
-Optional controls also avoid existing examples:
+Physical confirmation and the optional status output are configured as follows:
 
-- Connect a normally-open button between **PC13 (P1 pin 12)** and GND for
-  active-low physical confirmation. The internal pull-up is enabled.
-- Connect **PG9 (P1 pin 33)** through a 680 ohm to 1 kohm resistor to an LED
-  anode, with its cathode to GND, for active-high status indication.
+- Press the on-board blue **USER** button on **PA0** for active-high physical
+  confirmation. A pull-down is requested through the GPIO character device.
+- The on-board green **LD3** LED on **PG13** provides active-high status and
+  identification flashes.
 - If neither is connected, set `FMD_GPIO_ENABLED=no` in
   `find-my-device.conf`. During an authorization request, run
   `find-my-device-confirm` at the board console to emulate the button.
 
-Do not substitute the on-board USER button or green/red LEDs: those are kept
-available for the existing GPIO examples.
+The W5500 example reserves PA0 and PG13 while it runs. The red PG14 LED remains
+available to other examples.
 
 ## Build and host tests
 
@@ -127,7 +127,7 @@ make build_all
    `_device-setup._tcp.local` with Avahi, Bonjour, or the existing onboarding
    client. You can also open `http://<board-ip>:8080/api/info`.
 5. When the authorization page asks for physical confirmation, press the
-   external PC13 button or run `find-my-device-confirm` on the serial console.
+   on-board blue USER button or run `find-my-device-confirm` on the serial console.
 
 If DHCP receives no lease after four attempts, startup assigns a deterministic
 `169.254.x.y/16` address derived from the stable MAC and prints it. Configure

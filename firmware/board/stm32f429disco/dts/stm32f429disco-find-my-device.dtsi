@@ -45,8 +45,10 @@
 		pinctrl-0 = <&w5500_irq_pin>;
 		interrupt-parent = <&gpioe>;
 		interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
-		/* Conservative for jumper wires; W5500 itself supports faster SPI. */
-		spi-max-frequency = <12000000>;
+		/* Match the proven PSoC target rate; jumper-wire signal integrity is
+		 * the practical limit here, not the W5500 silicon maximum.
+		 */
+		spi-max-frequency = <1000000>;
 	};
 };
 

@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Buildroot STM32F429 demo <noreply@example.com>
+Date: Thu, 13 Aug 2026 19:15:00 +0300
+Subject: [PATCH] net: wiznet: w5100: poll W5500 transmit completion
+
+The W5500 SPI path handles receives on a workqueue and temporarily masks the
+socket interrupt output while draining packets. On STM32 GPIO/EXTI, a SENDOK
+event in that window can fail to wake the stopped transmit queue, leading to a
+watchdog reset and lost DHCP REQUEST packets.
+
+For W5500, leave only receive events routed to the interrupt pin and poll the
+SENDOK bit from the existing process-context transmit worker. This follows the
+completion sequence documented by WIZnet and leaves W5100/W5200 unchanged.
+
+Signed-off-by: Buildroot STM32F429 demo <noreply@example.com>
+---
+ drivers/net/ethernet/wiznet/w5100.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+--- a/drivers/net/ethernet/wiznet/w5100.c
++++ b/drivers/net/ethernet/wiznet/w5100.c
+@@ -131,6 +131,7 @@
+ #define   W5500_PHYCFGR_LNK_ON	BIT(0)
+ 
+ #define W5500_S0_REGS		0x10000
++#define W5500_S0_IMR		(W5500_S0_REGS + 0x002c)
+ 
+ #define W5500_Sn_RXMEM_SIZE(n)	\
+ 		(0x1001e + (n) * 0x40000) /* Sn RX Memory Size */
+@@ -704,6 +705,11 @@
+ 	}
+ 
+ 	w5100_write(priv, W5100_S0_MR(priv), mode);
++	/* SPI transfers run in process context. Poll transmit completion there
++	 * so it cannot be lost while receive handling temporarily masks SIMR.
++	 */
++	if (priv->ops->chip_id == W5500)
++		w5100_write(priv, W5500_S0_IMR, S0_IR_RECV);
+ 	w5100_command(priv, S0_CR_OPEN);
+ 	w5100_enable_intr(priv);
+ }
+@@ -835,7 +841,9 @@
+ static void w5100_tx_skb(struct net_device *ndev, struct sk_buff *skb)
+ {
+ 	struct w5100_priv *priv = netdev_priv(ndev);
++	unsigned long timeout;
+ 	u16 offset;
++	int ir;
+ 
+ 	offset = w5100_read16(priv, W5100_S0_TX_WR(priv));
+ 	w5100_writebuf(priv, offset, skb->data, skb->len);
+@@ -845,6 +853,20 @@
+ 	dev_kfree_skb(skb);
+ 
+ 	w5100_command(priv, S0_CR_SEND);
++
++	if (priv->ops->chip_id != W5500)
++		return;
++
++	timeout = jiffies + msecs_to_jiffies(100);
++	do {
++		ir = w5100_read(priv, W5100_S0_IR(priv));
++		if (ir & S0_IR_SENDOK) {
++			w5100_write(priv, W5100_S0_IR(priv), S0_IR_SENDOK);
++			netif_wake_queue(ndev);
++			return;
++		}
++		usleep_range(1000, 2000);
++	} while (!time_after(jiffies, timeout));
+ }
+ 
+ static void w5100_tx_work(struct work_struct *work)
+-- 
+2.50.1
