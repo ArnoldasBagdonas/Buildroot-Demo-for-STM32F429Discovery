@@ -38,6 +38,7 @@ fi
 DISPLAY_ENABLED=false
 USBSERIALDEVICE_ENABLED=false
 FIND_MY_DEVICE_ENABLED=false
+SPINAND_ENABLED=false
 if [ -f "${CONFIG_FILE}" ] && \
    grep -q '^BR2_PACKAGE_DISPLAYEXAMPLE=y$' "${CONFIG_FILE}"; then
   DISPLAY_ENABLED=true
@@ -49,6 +50,10 @@ fi
 if [ -f "${CONFIG_FILE}" ] && \
    grep -q '^BR2_PACKAGE_FIND_MY_DEVICE=y$' "${CONFIG_FILE}"; then
   FIND_MY_DEVICE_ENABLED=true
+fi
+if [ -f "${CONFIG_FILE}" ] && \
+   grep -q '^BR2_PACKAGE_SPINAND=y$' "${CONFIG_FILE}"; then
+  SPINAND_ENABLED=true
 fi
 
 if ${USBSERIALDEVICE_ENABLED} && ${DISPLAY_ENABLED}; then
@@ -63,6 +68,10 @@ fi
 
 if ${FIND_MY_DEVICE_ENABLED}; then
   DTB_FILE=${DTB_FILE%.dtb}-w5500.dtb
+fi
+
+if ${SPINAND_ENABLED}; then
+  DTB_FILE=${DTB_FILE%.dtb}-spinand.dtb
 fi
 
 if [ ! -f "${DTB_FILE}" ]; then

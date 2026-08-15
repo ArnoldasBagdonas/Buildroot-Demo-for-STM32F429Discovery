@@ -1,0 +1,2 @@
+#include "stm32f429disco-usbserialdevice.dts"
+#include "stm32f429disco-spinand.dtsi"

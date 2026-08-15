@@ -1,0 +1,21 @@
+config BR2_PACKAGE_SPINAND
+	bool "W25N02KV SPI-NAND: 32 MiB UBIFS data volume"
+	depends on !BR2_PACKAGE_DISPLAYEXAMPLE
+	depends on !BR2_PACKAGE_FIND_MY_DEVICE
+	help
+	  Enable a Winbond W25N02KV on SPI1 and expose the first 32 MiB as
+	  an UBI-managed UBIFS data volume. The package applies the required
+	  Linux and BusyBox configuration fragments, builds a dedicated DTB,
+	  and installs the spinand-ubi setup/status helper.
+
+	  The flash is connected to PA4 through PA7 on expansion header P2.
+	  It is never erased or formatted automatically. Run
+	  "spinand-ubi format --yes" once after checking the wiring.
+
+	  See package/spinand/README.md for wiring and first-use instructions.
+
+comment "W25N02KV SPI-NAND is unavailable with Display (shared PA4/PA6 pins)"
+	depends on BR2_PACKAGE_DISPLAYEXAMPLE
+
+comment "W25N02KV SPI-NAND is unavailable with Find My Device (XIP size limit)"
+	depends on BR2_PACKAGE_FIND_MY_DEVICE && !BR2_PACKAGE_DISPLAYEXAMPLE

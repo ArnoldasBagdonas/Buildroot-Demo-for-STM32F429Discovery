@@ -1,0 +1,139 @@
+#!/bin/sh
+
+set -e
+
+MTD_NAME=ubi
+UBI_NUM=0
+VOLUME_NAME=data
+MOUNT_POINT=/mnt/spinand
+
+find_mtd_num()
+{
+	for name_file in /sys/class/mtd/mtd*/name; do
+		[ -r "$name_file" ] || continue
+		read -r mtd_name < "$name_file"
+		if [ "$mtd_name" = "$MTD_NAME" ]; then
+			mtd=${name_file%/name}
+			mtd=${mtd%/}
+			mtd=${mtd##*/mtd}
+			MTD_NUM=$mtd
+			return 0
+		fi
+	done
+	return 1
+}
+
+require_mtd()
+{
+	find_mtd_num || {
+		echo "SPI-NAND MTD partition '$MTD_NAME' was not found." >&2
+		echo "Check the wiring and that the -spinand DTB was flashed." >&2
+		exit 1
+	}
+	MTD_DEV=/dev/mtd${MTD_NUM}
+}
+
+ubi_is_attached()
+{
+	[ -r "/sys/class/ubi/ubi${UBI_NUM}/mtd_num" ] &&
+		[ "$(cat "/sys/class/ubi/ubi${UBI_NUM}/mtd_num")" = "$MTD_NUM" ]
+}
+
+is_mounted()
+{
+	grep -q " $MOUNT_POINT " /proc/mounts 2>/dev/null
+}
+
+attach_ubi()
+{
+	if ubi_is_attached; then
+		return 0
+	fi
+	if [ -e "/sys/class/ubi/ubi${UBI_NUM}" ]; then
+		echo "ubi${UBI_NUM} is already assigned to another MTD device." >&2
+		return 1
+	fi
+	ubiattach -m "$MTD_NUM" -d "$UBI_NUM" /dev/ubi_ctrl
+}
+
+show_status()
+{
+	require_mtd
+	echo "MTD device: $MTD_DEV"
+	for item in name size erasesize writesize oobsize; do
+		[ -r "/sys/class/mtd/mtd${MTD_NUM}/$item" ] || continue
+		printf '%-10s %s\n' "$item:" "$(cat "/sys/class/mtd/mtd${MTD_NUM}/$item")"
+	done
+	if ubi_is_attached; then
+		echo "UBI device: /dev/ubi${UBI_NUM}"
+	else
+		echo "UBI device: detached"
+	fi
+	if is_mounted; then
+		echo "UBIFS:     mounted at $MOUNT_POINT"
+	else
+		echo "UBIFS:     not mounted"
+	fi
+}
+
+mount_volume()
+{
+	require_mtd
+	attach_ubi || return 1
+	if [ ! -e "/sys/class/ubi/ubi${UBI_NUM}_0" ]; then
+		echo "UBI volume '$VOLUME_NAME' does not exist." >&2
+		echo "Initialize it once with: spinand-ubi format --yes" >&2
+		return 1
+	fi
+	mkdir -p "$MOUNT_POINT"
+	if ! is_mounted; then
+		mount -t ubifs "ubi${UBI_NUM}:$VOLUME_NAME" "$MOUNT_POINT"
+	fi
+	echo "UBIFS mounted at $MOUNT_POINT"
+}
+
+format_volume()
+{
+	[ "${1:-}" = "--yes" ] || {
+		echo "This erases the complete 32 MiB '$MTD_NAME' partition." >&2
+		echo "Repeat with: spinand-ubi format --yes" >&2
+		exit 2
+	}
+	require_mtd
+	if is_mounted; then
+		umount "$MOUNT_POINT"
+	fi
+	if ubi_is_attached; then
+		ubidetach -d "$UBI_NUM" /dev/ubi_ctrl
+	fi
+	echo "Erasing $MTD_DEV..."
+	flash_eraseall "$MTD_DEV"
+	echo "Creating UBI device and '$VOLUME_NAME' volume..."
+	ubiattach -m "$MTD_NUM" -d "$UBI_NUM" /dev/ubi_ctrl
+	ubimkvol -N "$VOLUME_NAME" -m "/dev/ubi${UBI_NUM}"
+	mount_volume
+}
+
+case "${1:-status}" in
+	status)
+		show_status
+		;;
+	mount)
+		mount_volume
+		;;
+	format)
+		format_volume "${2:-}"
+		;;
+	unmount)
+		if is_mounted; then
+			umount "$MOUNT_POINT"
+		fi
+		if [ -r "/sys/class/ubi/ubi${UBI_NUM}/mtd_num" ]; then
+			ubidetach -d "$UBI_NUM" /dev/ubi_ctrl
+		fi
+		;;
+	*)
+		echo "Usage: spinand-ubi {status|mount|format --yes|unmount}" >&2
+		exit 2
+		;;
+esac

@@ -1,0 +1,52 @@
+/*
+ * Winbond W25N02KV on the P2 expansion header.
+ *
+ * P2 pin 22 / PA4: SPI1 chip select
+ * P2 pin 21 / PA5: SPI1 clock
+ * P2 pin 24 / PA6: SPI1 MISO (flash DO/IO1)
+ * P2 pin 23 / PA7: SPI1 MOSI (flash DI/IO0)
+ *
+ * The chip is 256 MiB. Only its first 32 MiB are intentionally exposed so
+ * this initial integration has a small, fixed UBI wear-leveling domain.
+ */
+
+&pinctrl {
+	spi1_spinand_pins: spi1-spinand-0 {
+		pins1 {
+			pinmux = <STM32_PINMUX('A', 5, AF5)>, /* SPI1_SCK */
+				 <STM32_PINMUX('A', 7, AF5)>; /* SPI1_MOSI */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <2>;
+		};
+
+		pins2 {
+			pinmux = <STM32_PINMUX('A', 6, AF5)>; /* SPI1_MISO */
+			bias-disable;
+		};
+	};
+};
+
+&spi1 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi1_spinand_pins>;
+	cs-gpios = <&gpioa 4 GPIO_ACTIVE_LOW>;
+
+	spinand: flash@0 {
+		compatible = "spi-nand";
+		reg = <0>;
+		spi-max-frequency = <10000000>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "ubi";
+				reg = <0x00000000 0x02000000>;
+			};
+		};
+	};
+};
