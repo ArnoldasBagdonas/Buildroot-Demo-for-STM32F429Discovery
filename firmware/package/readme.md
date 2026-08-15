@@ -93,14 +93,17 @@ diagnostic package may be selected in addition to any one example:
 | `displaydebug` | `BR2_PACKAGE_DISPLAYDEBUG` | `displaydebug` | Optional reusable kernel and peripheral diagnostics |
 | `usbserialdevice` | `BR2_PACKAGE_USBSERIALDEVICE` | `usbserialchat` | USB CDC ACM data port with a loopback test utility |
 | `spinand` | `BR2_PACKAGE_SPINAND` | `spinand-ubi` | W25N02KV with a 32 MiB UBI/UBIFS data volume |
+| `sdcard` | `BR2_PACKAGE_SDCARD` | `sdcard` | Display-safe SPI4 SD/SDHC card with FAT storage |
 
 Wiring, build, initialization, and persistence-test instructions for the
 SPI-NAND package are in [`spinand/README.md`](spinand/README.md).
+The display-compatible SD-card wiring and usage are in
+[`sdcard/README.md`](sdcard/README.md).
 
 Optional: confirm the selection before building:
 
 ```bash
-grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|DISPLAY(EXAMPLE|DEBUG)|USBSERIALDEVICE|SPINAND|PERIPHERY)=y$' buildroot/.config
+grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|DISPLAY(EXAMPLE|DEBUG)|USBSERIALDEVICE|SPINAND|SDCARD|PERIPHERY)=y$' buildroot/.config
 ```
 
 Examples 3 through 7 automatically select `BR2_PACKAGE_PERIPHERY`. It is an

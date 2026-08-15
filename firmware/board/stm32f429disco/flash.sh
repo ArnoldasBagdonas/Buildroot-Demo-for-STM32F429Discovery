@@ -6,6 +6,7 @@ OUTPUT_DIR=${1:-}
 #BOARD_NAME=${2:-stm32f429discovery}
 BOARD_NAME=stm32f429discovery  # Override here, hardcoded
 OPENOCD_ADAPTER_SPEED_KHZ=${OPENOCD_ADAPTER_SPEED_KHZ:-1000}
+XIP_MAX_SIZE=2048000
 
 
 if ! test -d "${OUTPUT_DIR}" ; then
@@ -39,6 +40,7 @@ DISPLAY_ENABLED=false
 USBSERIALDEVICE_ENABLED=false
 FIND_MY_DEVICE_ENABLED=false
 SPINAND_ENABLED=false
+SDCARD_ENABLED=false
 if [ -f "${CONFIG_FILE}" ] && \
    grep -q '^BR2_PACKAGE_DISPLAYEXAMPLE=y$' "${CONFIG_FILE}"; then
   DISPLAY_ENABLED=true
@@ -54,6 +56,10 @@ fi
 if [ -f "${CONFIG_FILE}" ] && \
    grep -q '^BR2_PACKAGE_SPINAND=y$' "${CONFIG_FILE}"; then
   SPINAND_ENABLED=true
+fi
+if [ -f "${CONFIG_FILE}" ] && \
+   grep -q '^BR2_PACKAGE_SDCARD=y$' "${CONFIG_FILE}"; then
+  SDCARD_ENABLED=true
 fi
 
 if ${USBSERIALDEVICE_ENABLED} && ${DISPLAY_ENABLED}; then
@@ -74,13 +80,31 @@ if ${SPINAND_ENABLED}; then
   DTB_FILE=${DTB_FILE%.dtb}-spinand.dtb
 fi
 
+if ${SDCARD_ENABLED}; then
+  DTB_FILE=${DTB_FILE%.dtb}-sdcard.dtb
+fi
+
 if [ ! -f "${DTB_FILE}" ]; then
   echo "ERROR: selected DTB does not exist: ${DTB_FILE}" >&2
   echo "Build the current menuconfig selection with 'make build_all' first." >&2
   exit 1
 fi
 
+XIP_FILE=${OUTPUT_DIR}/images/xipImage
+if [ ! -f "${XIP_FILE}" ]; then
+  echo "ERROR: XIP image does not exist: ${XIP_FILE}" >&2
+  echo "Build the current menuconfig selection with 'make build_all' first." >&2
+  exit 1
+fi
+XIP_SIZE=$(stat -c %s "${XIP_FILE}")
+if (( XIP_SIZE > XIP_MAX_SIZE )); then
+  echo "ERROR: xipImage is ${XIP_SIZE} bytes; maximum is ${XIP_MAX_SIZE} bytes." >&2
+  echo "Refusing to overwrite past the STM32F429 internal-flash region." >&2
+  exit 1
+fi
+
 echo "Flashing DTB: $DTB_FILE"
+echo "XIP image: ${XIP_SIZE}/${XIP_MAX_SIZE} bytes"
 echo "ST-LINK adapter speed: ${OPENOCD_ADAPTER_SPEED_KHZ} kHz"
 
 ${OUTPUT_DIR}/host/bin/openocd -f board/${BOARD_NAME}.cfg \
@@ -92,6 +116,6 @@ ${OUTPUT_DIR}/host/bin/openocd -f board/${BOARD_NAME}.cfg \
   -c "flash info 0" \
   -c "flash write_image erase ${OUTPUT_DIR}/images/stm32f429i-disco.bin 0x08000000" \
   -c "flash write_image erase ${DTB_FILE} 0x08004000" \
-  -c "flash write_image erase ${OUTPUT_DIR}/images/xipImage 0x0800C000" \
+  -c "flash write_image erase ${XIP_FILE} 0x0800C000" \
   -c "reset run" \
   -c "shutdown"

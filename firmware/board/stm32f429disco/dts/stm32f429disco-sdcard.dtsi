@@ -1,0 +1,46 @@
+/*
+ * Removable SD card in SPI mode on display-safe P1 expansion-header pins.
+ *
+ * P1 pin 15 / PE2: SPI4 clock
+ * P1 pin 14 / PE5: SPI4 MISO (card DO)
+ * P1 pin 11 / PE6: SPI4 MOSI (card DI)
+ * P1 pin 13 / PE4: card chip select
+ *
+ * The four pins are not used by the LTDC/display pinctrl state. The adapter
+ * has no card-detect or write-protect signal, so the MMC core polls the slot.
+ */
+
+&pinctrl {
+	spi4_sdcard_pins: spi4-sdcard-0 {
+		pins1 {
+			pinmux = <STM32_PINMUX('E', 2, AF5)>, /* SPI4_SCK */
+				 <STM32_PINMUX('E', 6, AF5)>; /* SPI4_MOSI */
+			bias-disable;
+			drive-push-pull;
+			slew-rate = <2>;
+		};
+
+		pins2 {
+			pinmux = <STM32_PINMUX('E', 5, AF5)>; /* SPI4_MISO */
+			bias-pull-up;
+		};
+	};
+};
+
+&spi4 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi4_sdcard_pins>;
+	cs-gpios = <&gpioe 4 GPIO_ACTIVE_LOW>;
+
+	sdcard: mmc@0 {
+		compatible = "mmc-spi-slot";
+		reg = <0>;
+		spi-max-frequency = <4000000>;
+		voltage-ranges = <3200 3400>;
+		broken-cd;
+		disable-wp;
+		no-sdio;
+		no-mmc;
+	};
+};

@@ -1,0 +1,21 @@
+config BR2_PACKAGE_SDCARD
+	bool "SD card adapter: SPI-mode FAT storage"
+	depends on !BR2_PACKAGE_FIND_MY_DEVICE
+	depends on !BR2_PACKAGE_SPINAND
+	help
+	  Enable a removable SD/SDHC card adapter on SPI4 and mount its first
+	  FAT16/FAT32 partition at /mnt/sdcard. The package applies the Linux
+	  and BusyBox configuration fragments, builds a dedicated -sdcard DTB,
+	  and installs the sdcard status/mount helper.
+
+	  The display-safe wiring uses PE2, PE4, PE5, and PE6 on expansion
+	  header P1. It can be selected together with the Display example.
+	  Cards are never formatted by this package.
+
+	  See package/sdcard/README.md for wiring and usage instructions.
+
+comment "SD card adapter is unavailable with Find My Device (shared SPI4 pins)"
+	depends on BR2_PACKAGE_FIND_MY_DEVICE
+
+comment "SD card adapter is unavailable with SPI-NAND (storage image size)"
+	depends on BR2_PACKAGE_SPINAND && !BR2_PACKAGE_FIND_MY_DEVICE

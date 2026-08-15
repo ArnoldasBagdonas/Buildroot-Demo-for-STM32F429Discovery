@@ -1,0 +1,132 @@
+#!/bin/sh
+
+set -e
+
+MOUNT_POINT=/mnt/sdcard
+AUTOMOUNT_STATE=/run/sdcard-automount
+
+set_automount()
+{
+	echo "$1" > "$AUTOMOUNT_STATE"
+}
+
+automount_enabled()
+{
+	[ -e "$AUTOMOUNT_STATE" ] || return 0
+	read -r automount_state < "$AUTOMOUNT_STATE"
+	[ "$automount_state" = enabled ]
+}
+
+find_card()
+{
+	for sysdev in /sys/class/block/mmcblk[0-9]*; do
+		[ -e "$sysdev" ] || continue
+		name=${sysdev##*/}
+		case "$name" in
+			*p*) continue ;;
+		esac
+		CARD_DEV=/dev/$name
+		if [ -b "${CARD_DEV}p1" ]; then
+			MOUNT_DEV=${CARD_DEV}p1
+		else
+			MOUNT_DEV=$CARD_DEV
+		fi
+		return 0
+	done
+	return 1
+}
+
+is_mounted()
+{
+	while read -r source target options; do
+		[ "$target" = "$MOUNT_POINT" ] && return 0
+	done < /proc/mounts
+	return 1
+}
+
+require_card()
+{
+	find_card || {
+		echo "No SPI SD card was detected." >&2
+		echo "Check the card, wiring, and that the -sdcard DTB was flashed." >&2
+		exit 1
+	}
+}
+
+show_status()
+{
+	if automount_enabled; then
+		echo "Automount: enabled"
+	else
+		echo "Automount: disabled until the card is removed"
+	fi
+	if ! find_card; then
+		echo "SD card: not detected"
+		return 1
+	fi
+	echo "Card device:  $CARD_DEV"
+	echo "Mount device: $MOUNT_DEV"
+	if [ -r "/sys/class/block/${CARD_DEV##*/}/size" ]; then
+		read -r sectors < "/sys/class/block/${CARD_DEV##*/}/size"
+		echo "Size sectors: $sectors (512 bytes each)"
+	fi
+	if is_mounted; then
+		echo "FAT filesystem: mounted at $MOUNT_POINT"
+	else
+		echo "FAT filesystem: not mounted"
+	fi
+}
+
+mount_card()
+{
+	set_automount enabled
+	require_card
+	mkdir -p "$MOUNT_POINT"
+	if ! is_mounted; then
+		mount -t vfat "$MOUNT_DEV" "$MOUNT_POINT"
+	fi
+	echo "SD card mounted at $MOUNT_POINT"
+}
+
+watch_card()
+{
+	[ -e "$AUTOMOUNT_STATE" ] || set_automount enabled
+	while true; do
+		if find_card; then
+			if automount_enabled && ! is_mounted; then
+				mount_card >/dev/null 2>&1 || true
+			fi
+		else
+			# A card pulled without a prior unmount can leave a stale mount.
+			# Detach it without attempting further I/O to the missing device.
+			if is_mounted; then
+				umount -l "$MOUNT_POINT" || true
+			fi
+			set_automount enabled
+		fi
+		sleep 1
+	done
+}
+
+case "${1:-status}" in
+	status)
+		show_status
+		;;
+	mount)
+		mount_card
+		;;
+	unmount)
+		set_automount disabled
+		if is_mounted; then
+			sync
+			umount "$MOUNT_POINT"
+		fi
+		;;
+	watch)
+		watch_card
+		;;
+	*)
+		echo "Usage: sdcard {status|mount|unmount|watch}" >&2
+		exit 2
+		;;
+esac

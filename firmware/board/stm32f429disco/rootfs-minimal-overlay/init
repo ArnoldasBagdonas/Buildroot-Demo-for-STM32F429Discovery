@@ -6,6 +6,9 @@ export PATH="/bin:/sbin:/usr/bin:/usr/sbin" PS1='# '
 if [ -x /usr/sbin/spinand-ubi ]; then
 	/usr/sbin/spinand-ubi mount || echo "SPI-NAND: not initialized; run 'spinand-ubi format --yes' once"
 fi
+if [ -x /usr/sbin/sdcard ]; then
+	/usr/sbin/sdcard watch &
+fi
 if [ -x /usr/bin/find-my-device-start ]; then
 	/usr/bin/find-my-device-start &
 fi
