@@ -8,24 +8,34 @@ boot and mounted again after a later removal and insertion. The package never
 partitions or formats a card.
 
 The chosen SPI4 pins do not overlap the STM32F429 Discovery LCD, so
-`BR2_PACKAGE_SDCARD` and `BR2_PACKAGE_DISPLAYEXAMPLE` can be selected together.
+`BR2_PACKAGE_SDCARD` and `BR2_PACKAGE_DISPLAY` can be selected together.
 The package is mutually exclusive with Find My Device because its W5500 uses
 the same SPI4 signals, and with the separate SPI-NAND storage image.
 
 ## How the helper is integrated
 
-The file `package/sdcard/sdcard` is a POSIX shell script that runs on the
-STM32 target; it is not a host-side image-building or flashing tool. When
-`BR2_PACKAGE_SDCARD=y`, Buildroot treats this directory as a local package and
-copies the script into the package build directory. The install commands in
-`sdcard.mk` then install it in the target root filesystem as the executable
-`/usr/sbin/sdcard` and create its mount point, `/mnt/sdcard`.
+The file `package/sdcard/sdcard.c` is the source for a native program that runs
+on the STM32 target; it is not a host-side image-building or flashing tool.
+When `BR2_PACKAGE_SDCARD=y`, Buildroot treats this directory as a local package,
+cross-compiles the source with the no-MMU ARM toolchain, installs the target
+command as `/usr/sbin/sdcard`, and creates `/mnt/sdcard`.
+
+The implementation uses Linux system calls for mounting, unmounting, syncing,
+sleeping, signals, and device inspection. This keeps the long-running watcher
+independent of optional BusyBox applets and demonstrates when a Buildroot
+package should install a target program rather than a shell script.
+
+When Display and SD card are selected together, `display.mk` compiles the SD
+helper into the Display multicall executable and `sdcard.mk` installs
+`/usr/sbin/sdcard` as a symbolic link to it. The commands remain independent,
+but the combined firmware stores the static C runtime only once. With SD card
+selected by itself, `sdcard.mk` builds `sdcard.c` as a standalone executable.
+The command line and automount behavior are the same in both builds.
 
 Selecting the package also makes the rest of the storage stack available:
 
 - `linux-sdcard.config` enables the SPI MMC/SD block driver and FAT filesystem
   support in the kernel.
-- `busybox-sdcard.config` enables the BusyBox commands used by the helper.
 - `sdcard.mk` adds the matching `-sdcard` device tree to the kernel build. The
   device tree describes the SPI4 bus, chip-select, and MMC-over-SPI device.
 - The root filesystem `init` script starts `/usr/sbin/sdcard watch &` when the
@@ -33,10 +43,10 @@ Selecting the package also makes the rest of the storage stack available:
 
 At runtime, the kernel creates block devices such as `/dev/mmcblk0` after it
 detects a card. The background `sdcard watch` process checks once per second
-for a base MMC device under `/sys/class/block`, ignoring the separate partition
-entries. It uses partition 1, for example `/dev/mmcblk0p1`, when that block
-device exists; otherwise it uses the whole card, `/dev/mmcblk0`. It mounts the
-selected device as `vfat` at `/mnt/sdcard`.
+for a base MMC device under `/sys/class/block`. It uses partition 1, for
+example `/dev/mmcblk0p1`, when that block device exists; otherwise it uses the
+whole card, `/dev/mmcblk0`. It calls the kernel mount interface directly to
+mount the selected device as `vfat` at `/mnt/sdcard`.
 
 The helper supports these commands:
 
@@ -130,7 +140,7 @@ make menuconfig
 Enable both of these symbols and save the configuration:
 
 ```text
-BR2_PACKAGE_DISPLAYEXAMPLE
+BR2_PACKAGE_DISPLAY
 BR2_PACKAGE_SDCARD
 ```
 
@@ -145,6 +155,18 @@ stat -c 'xipImage size: %s bytes' buildroot/output/images/xipImage
 Do not flash if `xipImage` exceeds 2,048,000 bytes. `make flash` enforces this
 limit, reads the selection, and automatically uses
 `stm32f429disco-display-sdcard.dtb`.
+
+With the Display example's default autostart option enabled, boot starts the
+SD automounter first and then starts the slideshow supervisor. Supported PNG,
+JPEG, GIF, and BMP files placed directly in the card's root are selected
+automatically. Images are scaled to fit the LCD while preserving aspect ratio;
+large JPEGs are first reduced by libjpeg during decoding to limit peak RAM use.
+If the card is absent or contains no supported root-level images, the slideshow
+uses its bundled test images instead. Inspect the live choice with:
+
+```sh
+display-auto status
+```
 
 ## Prepare and use a card
 

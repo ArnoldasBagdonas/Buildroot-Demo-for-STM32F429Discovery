@@ -1,10 +1,13 @@
-# Display Example
+# Display example
 
 This package enables the STM32F429Discovery LCD only when
-`BR2_PACKAGE_DISPLAYEXAMPLE` is selected. It adds the display-specific Linux
-configuration and device tree, `fbv`, the slideshow script, and compact PNG,
+`BR2_PACKAGE_DISPLAY` is selected. It adds the display-specific Linux
+configuration and device tree, `fbv`, the native display utility, and compact PNG,
 JPEG, and GIF test cards. `fbv` also accepts BMP files without another decoder
-library.
+library. The optional, default-enabled autostart supervisor begins a slideshow
+at boot. It prefers images in the root of an automounted SD card and falls back
+to the bundled test cards when SD support, a mounted card, or usable card
+images are absent.
 
 The core display fragment retains procfs because Linux 6.1 framebuffer
 registration needs `/proc/fb` in order to create `/dev/fb0`. Extra diagnostic
@@ -17,12 +20,20 @@ smaller normal image.
 The display implementation uses conditional kernel configuration, a
 board-specific device tree, and target compiler flags.
 
-Selecting `BR2_PACKAGE_DISPLAYEXAMPLE` in [Config.in](Config.in) selects `fbv`
+Selecting `BR2_PACKAGE_DISPLAY` in [Config.in](Config.in) selects `fbv`
 and its PNG, JPEG, and GIF decoders. The selection also activates the
-display-only integration in [displayexample.mk](displayexample.mk) and
+display-only integration in [display.mk](display.mk) and
 [external.mk](../../external.mk). When the example is disabled, the decoder
 libraries, viewer, images, display kernel features, and display DTB are not
 included in the firmware.
+
+The nested `BR2_PACKAGE_DISPLAY_AUTOSTART` option demonstrates a
+conditional package feature. It defaults to enabled and installs
+`display-auto` as a link to the native Display multicall program. The board's
+minimal `init` script detects that executable
+and starts it after the independent `sdcard watch` automounter. Disabling the
+option removes the supervisor, while the manual `display` command and
+all display drivers remain available.
 
 The conditional
 [linux-display.config](../../board/stm32f429disco/linux-display.config) fragment
@@ -64,11 +75,49 @@ static/FLAT-binary target flags on make's command line. This fixes GIF decoding
 while keeping giflib compatible with the target ABI. fbv uses its standard
 framebuffer `mmap()` implementation.
 
-The `displayexample` script activates the first advertised framebuffer mode
+The native `display` command activates the first advertised framebuffer mode
 before starting `fbv`. This first modeset initializes the panel, enables LTDC
-scanout, and turns on the runtime-managed LCD clock. It then presents the
-bundled PNG, JPEG, and GIF files as an interactive slideshow. BMP decoding is
-available from fbv without another image library.
+scanout, and turns on the runtime-managed LCD clock. With no explicit image
+directory, it selects the first usable source in this order:
+
+1. supported images in the root of a mounted `/mnt/sdcard`;
+2. bundled images in `/usr/share/display`.
+
+The directory is intentionally not searched recursively, making it easy to
+teach and predict which files enter the slideshow. Supported filename suffixes
+are `.png`, `.jpg`, `.jpeg`, `.gif`, and `.bmp`, in lowercase or uppercase.
+
+`fbv`'s color-average scaler reduces oversized images while preserving their
+aspect ratio. A landscape image is normally constrained by width, a portrait
+image by height, and an image matching the panel's aspect ratio by both. The
+image is therefore completely visible within the 240x320 framebuffer without
+cropping or distortion. Smaller images are enlarged with the same
+aspect-preserving behavior.
+
+Fitting after a full decode is too late for a multi-megapixel JPEG on a small
+no-MMU target. The project patch
+[`0002-downsample-large-jpegs-during-decode.patch`](../../board/stm32f429disco/patches/fbv/0002-downsample-large-jpegs-during-decode.patch)
+therefore asks libjpeg to use its native 1/2, 1/4, or 1/8 IDCT reduction before
+allocating the RGB image. `fbv` then performs the exact final fit. This keeps
+normal camera JPEGs within RAM while retaining the same aspect-preserving
+result. PNG, GIF, and BMP inputs still require enough RAM for their decoded
+source before the final fit, so exceptionally large files in those formats
+should be resized on the host.
+
+The project patch
+[`0001-add-noninteractive-slideshow-mode.patch`](../../board/stm32f429disco/patches/fbv/0001-add-noninteractive-slideshow-mode.patch)
+adds `fbv --noinput`. A boot-time slideshow advances only on its timer and
+never reads the serial console. Interactive invocation retains the original
+navigation keys. This is an example of using `BR2_GLOBAL_PATCH_DIR` to adapt an
+upstream Buildroot package without modifying the Buildroot checkout.
+
+The target commands `display`, `display-auto`, and `display-pattern` are three
+symbolic links to one native multicall executable. In a combined Display + SD
+image, `/usr/sbin/sdcard` links to it as well. Dispatching on the invoked name
+keeps the teaching commands clear while avoiding duplicate static runtimes in
+the initramfs. `display.c` owns source discovery, service control, and `fbv`
+supervision; `display-pattern.c` supplies the direct framebuffer patterns; and
+`sdcard.c` is included only when SD support is selected.
 
 The optional `BR2_PACKAGE_DISPLAYDEBUG` selection is intentionally independent.
 Its debugfs, logging, diagnostic applets, and `displaydebug` command are not
@@ -84,7 +133,7 @@ make configure
 make menuconfig
 ```
 
-Search for `BR2_PACKAGE_DISPLAYEXAMPLE`, enable it, save, and exit. Then run:
+Search for `BR2_PACKAGE_DISPLAY`, enable it, save, and exit. Then run:
 
 ```bash
 make build_all
@@ -97,24 +146,63 @@ Confirm that the flash output names the display DTB:
 Flashing DTB: buildroot/output/images/stm32f429disco-display.dtb
 ```
 
-The LCD stays blank at the serial shell until the viewer is started. On the
-board, run:
+When `BR2_PACKAGE_DISPLAY_AUTOSTART=y`, the slideshow starts during
+boot and the serial shell remains usable. Inspect the service and selected
+source with:
 
 ```sh
-displayexample
+display-auto status
 ```
+
+A Display-only image reports `/usr/share/display`. A Display + SD image
+reports `/mnt/sdcard` whenever that filesystem is mounted and its root contains
+at least one supported image. Otherwise it reports the built-in directory.
+
+To demonstrate SD-card composition, select both `BR2_PACKAGE_DISPLAY`
+and `BR2_PACKAGE_SDCARD`, rebuild, and flash. Copy images to the card's root:
+
+```text
+/photo.jpg
+/diagram.PNG
+/animation.gif
+```
+
+The SD automounter mounts the card at `/mnt/sdcard`. After the current pass,
+the supervisor notices the new source and switches to the card. Removing the
+card safely with `sdcard unmount` makes the next pass use built-in images;
+removing and reinserting it re-enables automount as described in the SD-card
+package documentation.
+
+Service controls are:
+
+```sh
+display-auto status
+display-auto stop
+display-auto start 5
+display-auto restart 2
+```
+
+For an interactive slideshow, run:
+
+```sh
+display
+```
+
+This automatically stops the background supervisor so that two processes do
+not write `/dev/fb0` simultaneously. Restart it afterward with
+`display-auto start` if desired.
 
 Use `q` to quit, Space or Enter for the next image, and `<` or `>` to move
 backward or forward. An integer delay in seconds and another image directory
 are optional:
 
 ```sh
-displayexample 5
-displayexample 2 /path/to/images
+display 5
+display 2 /path/to/images
 ```
 
-The alternative directory may contain `.png`, `.jpg`, `.jpeg`, `.gif`, and
-`.bmp` files.
+Passing an explicit directory bypasses SD-card and built-in source selection.
+The same fitting behavior is used for every source.
 
 ## Known-good ST hardware demonstration
 
@@ -155,7 +243,7 @@ First check the framebuffer and run the viewer:
 ```sh
 ls -l /dev/fb0
 ls -l /sys/class/drm /sys/class/graphics 2>&1
-displayexample
+display
 ```
 
 Collect a single report of system information, interrupts, the clock tree,
@@ -229,13 +317,10 @@ ls -l /sys/bus/platform/devices/*40016800*/driver 2>&1
 dmesg | grep -Ei 'drm|ltdc|ili9341|framebuffer|fb0|pinctrl|memory'
 ```
 
-The slideshow script avoids combined `set -eu`, which this project's minimal
-BusyBox `hush` rejects.
-
 ## Rebuild and retest loop
 
 Use a clean rebuild after changing the display DTS, Linux or BusyBox fragments,
-package selection, decoder configuration, slideshow script, or bundled images.
+package selection, decoder configuration, display utility, or bundled images.
 This avoids testing a new DTB with an old embedded root filesystem or kernel.
 From either the repository root on the host or `/workspace` in the
 devcontainer, run:
@@ -248,7 +333,7 @@ make build_all
 make flash
 ```
 
-In `make menuconfig`, select `displayexample` and the independent
+In `make menuconfig`, select `display` and the independent
 `displaydebug` package while diagnosing the LCD. `ioexample7` and `ioexample8`
 may also be selected because they use conflict-free UART5 pins. Disable
 `displaydebug` for the final image-size check.
@@ -263,7 +348,7 @@ Check these milestones during every iteration:
 5. `/sys/class/drm/card0` and `/dev/fb0` must exist.
 6. Run `displaydebug`; after display activation, verify that `lcd-tft` is
    enabled, LTDC registers are nonzero, and LTDC interrupt counts rise.
-7. Run `displayexample`; verify that the bundled PNG, JPEG, and GIF cards are
+7. Run `display`; verify that the bundled PNG, JPEG, and GIF cards are
    visible, navigation keys work, and `q` exits.
 
 If any milestone fails, stop there, collect the diagnostic block above, fix

@@ -1,5 +1,5 @@
 /*
- * Display variant built only when BR2_PACKAGE_DISPLAYEXAMPLE is selected.
+ * Display variant built only when BR2_PACKAGE_DISPLAY is selected.
  * The base board DTS remains display-free for minimal firmware builds.
  */
 #include "stm32f429disco-custom.dts"

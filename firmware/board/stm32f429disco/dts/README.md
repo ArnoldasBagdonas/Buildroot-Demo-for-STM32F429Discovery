@@ -182,7 +182,7 @@ The minimal profile exposes the onboard `L3GD20` gyroscope on `SPI5` chip select
   - If `"st,l3gd20-gyro"` is present and supported, the kernel will automatically bind to the `L3GD20` driver. Otherwise, `/dev/spidev*` will be exposed for testing or debugging.
 
 The base device tree keeps the LCD and its second chip select disabled. Selecting
-`BR2_PACKAGE_DISPLAYEXAMPLE` builds the separate
+`BR2_PACKAGE_DISPLAY` builds the separate
 `stm32f429disco-display.dtb`; `make flash` then selects that DTB automatically.
 
 **Device Tree** (`stm32f429disco-custom.dts`)
@@ -219,7 +219,7 @@ The base device tree keeps the LCD and its second chip select disabled. Selectin
 
 ### Display
 
-The opt-in `displayexample` package enables the STM32 LTDC, the ILI9341 panel
+The opt-in `display` package enables the STM32 LTDC, the ILI9341 panel
 on SPI5 chip select 1, DRM framebuffer emulation, `fbv`, and its PNG/JPEG/GIF
 decoders. `fbv` also retains its built-in BMP support without adding a decoder
 library. Its Linux settings live in `linux-display.config` rather than the
@@ -232,7 +232,7 @@ is selected. Consequently, a normal build contains neither the display nodes
 nor the display kernel and root-filesystem payload.
 
 On a display-example image, `/dev/fb0` is the compatibility framebuffer used
-by the slideshow script. See `firmware/package/readme.md` for the complete
+by the display utility. See `firmware/package/readme.md` for the complete
 selection, build, flash, and manual test procedure.
 
 ### MEM

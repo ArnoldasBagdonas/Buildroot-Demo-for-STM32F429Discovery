@@ -89,7 +89,7 @@ diagnostic package may be selected in addition to any one example:
 | `ioexample6` | `BR2_PACKAGE_IOEXAMPLE6` | `ioexample6` | Interactive PWM test on TIM3_CH1/PB4 |
 | `ioexample7` | `BR2_PACKAGE_IOEXAMPLE7` | `ioexample7` | UART test, defaulting to `/dev/ttySTM1` |
 | `ioexample8` | `BR2_PACKAGE_IOEXAMPLE8` | `ioexample8` | RS-485 test, defaulting to `/dev/ttySTM1` |
-| `displayexample` | `BR2_PACKAGE_DISPLAYEXAMPLE` | `displayexample` | LCD slideshow testing PNG, JPEG, GIF, and BMP decoding |
+| `display` | `BR2_PACKAGE_DISPLAY` | `display`, `display-auto` | LCD slideshow with built-in images and optional automounted SD-card images |
 | `displaydebug` | `BR2_PACKAGE_DISPLAYDEBUG` | `displaydebug` | Optional reusable kernel and peripheral diagnostics |
 | `usbserialdevice` | `BR2_PACKAGE_USBSERIALDEVICE` | `usbserialchat` | USB CDC ACM data port with a loopback test utility |
 | `spinand` | `BR2_PACKAGE_SPINAND` | `spinand-ubi` | W25N02KV with a 32 MiB UBI/UBIFS data volume |
@@ -103,14 +103,14 @@ The display-compatible SD-card wiring and usage are in
 Optional: confirm the selection before building:
 
 ```bash
-grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|DISPLAY(EXAMPLE|DEBUG)|USBSERIALDEVICE|SPINAND|SDCARD|PERIPHERY)=y$' buildroot/.config
+grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|DISPLAY(_AUTOSTART|DEBUG)?|USBSERIALDEVICE|SPINAND|SDCARD|PERIPHERY)=y$' buildroot/.config
 ```
 
 Examples 3 through 7 automatically select `BR2_PACKAGE_PERIPHERY`. It is an
 internal build dependency, so you only need to select the example itself.
 
 UART examples use `/dev/ttySTM1`, backed by UART5 on PC12 (TX) and PD2 (RX).
-UART5 is enabled in every board DTB and can coexist with `displayexample` and
+UART5 is enabled in every board DTB and can coexist with `display` and
 the W5500 SPI4 interface. The USART1 ST-Link serial console remains available
 in every image as `/dev/ttySTM0`.
 
@@ -165,15 +165,24 @@ ioexample8 /dev/ttySTM1
 ioexample6 0 0
 ```
 
-For the display example, run:
+The default-enabled display autostart option begins the slideshow during boot.
+It uses supported images in the root of an automounted `/mnt/sdcard` when the
+SD-card package is selected and usable images are present; otherwise it uses
+the bundled demonstration images. Check the running source with:
 
 ```sh
-displayexample
+display-auto status
 ```
 
-The LCD remains blank at the serial shell until this command starts the
-viewer. Package-specific diagnostics are documented in
-`firmware/package/displayexample/readme.md`.
+For an interactive display session, run:
+
+```sh
+display
+```
+
+This stops the background slideshow first so it can take exclusive control of
+the framebuffer. Package-specific service controls and diagnostics are
+documented in `firmware/package/display/readme.md`.
 
 It displays the bundled 240x320 PNG, JPEG, and GIF test cards once, waiting
 three seconds between images. Press `q` to quit, Space or Enter to advance, or
@@ -181,13 +190,15 @@ three seconds between images. Press `q` to quit, Space or Enter to advance, or
 directory are optional:
 
 ```sh
-displayexample 5
-displayexample 2 /path/to/my/images
+display 5
+display 2 /path/to/my/images
 ```
 
-The alternative directory may also contain BMP files. BMP decoding is built
-into `fbv`, so it does not select another image library. A BMP test card is not
-bundled because its uncompressed pixels would consume unnecessary flash.
+The alternative directory may also contain BMP files. Oversized images from
+any source are reduced to fit the framebuffer width and height while preserving
+aspect ratio; smaller images are enlarged. BMP decoding is built into `fbv`,
+so it does not select another image library. A BMP test card is not bundled
+because its uncompressed pixels would consume unnecessary flash.
 
 The script uses BusyBox `/bin/sh` syntax rather than requiring GNU Bash, so
 selecting the example does not add a Bash interpreter to the image. Check the
@@ -195,10 +206,10 @@ display device and bundled files with:
 
 ```sh
 ls -l /dev/fb0
-ls -l /usr/share/displayexample
+ls -l /usr/share/display
 ```
 
-Selecting only `BR2_PACKAGE_DISPLAYEXAMPLE` automatically enables the Linux
+Selecting only `BR2_PACKAGE_DISPLAY` automatically enables the Linux
 DRM/LTDC/ILI9341 framebuffer configuration, builds the display-specific DTB,
 and selects `fbv` plus PNG, JPEG, and GIF decoder support. `make flash` reads
 `buildroot/.config` and flashes that DTB automatically. Do not configure
@@ -212,7 +223,7 @@ cost.
 
 The complete clean rebuild, flash, serial-paste, driver-binding, kernel-log,
 and retest procedure is documented in
-[`displayexample/readme.md`](displayexample/readme.md). Follow that loop until
+[`display/readme.md`](display/readme.md). Follow that loop until
 both `/dev/fb0` and the slideshow have been verified on the board.
 
 For `ioexample6`, connect an external LED to the TIM3 channel 1 output:

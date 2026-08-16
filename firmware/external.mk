@@ -3,7 +3,7 @@
 # Include all custom packages
 include $(sort $(wildcard $(BR2_EXTERNAL_FIRMWARE_PATH)/package/*/*.mk))
 
-ifeq ($(BR2_PACKAGE_DISPLAYEXAMPLE),y)
+ifeq ($(BR2_PACKAGE_DISPLAY),y)
 # giflib's upstream Makefile otherwise replaces Buildroot's no-MMU/static
 # target flags with "-O2 -fPIC". Pass CFLAGS on make's command line so the
 # library uses the same ABI and FLAT-binary settings as fbv and the rest of

@@ -1,0 +1,110 @@
+From 2bc1354d520031ff160561f638312823534f1341 Mon Sep 17 00:00:00 2001
+From: Buildroot Demo <buildroot-demo@example.com>
+Date: Sat, 15 Aug 2026 20:00:00 +0000
+Subject: [PATCH] fbv: add a non-interactive slideshow mode
+
+An fbv slideshow normally monitors stdin while its delay expires. A viewer
+started from the minimal init script would therefore compete with the serial
+shell for keystrokes. Add --noinput/-n so a timed slideshow waits without a
+file descriptor and advances without reading the console.
+
+This is intentionally independent from --noinfo/-i: one controls input while
+the other controls text drawn on the console.
+---
+ main.c | 25 +++++++++++++++++++++----
+ 1 file changed, 21 insertions(+), 4 deletions(-)
+
+diff --git a/main.c b/main.c
+index e376946..a29d455 100644
+--- a/main.c
++++ b/main.c
+@@ -38,7 +38,8 @@ static int opt_clear = 1,
+ 	   opt_stretch = 0,
+ 	   opt_delay = 0,
+ 	   opt_enlarge = 0,
+-	   opt_ignore_aspect = 0;
++	   opt_ignore_aspect = 0,
++	   opt_noinput = 0;
+ 
+ 
+ 
+@@ -327,13 +328,20 @@ int show_image(char *filename)
+ 			fd_set fds;
+ 			tv.tv_sec = delay / 10;
+ 			tv.tv_usec = (delay % 10) * 100000;
++			if(opt_noinput)
++			{
++				select(0, NULL, NULL, NULL, &tv);
++				break;
++			}
+ 			FD_ZERO(&fds);
+ 			FD_SET(0, &fds);
+ 			
+ 			if(select(1, &fds, NULL, NULL, &tv) <= 0)
+ 				break;
+ 			delay = 0;
+ 		}
++		if(opt_noinput)
++			break;
+ 		
+ 		c = getchar();
+ 		switch(c)
+@@ -446,6 +455,7 @@ void help(char *name)
+ 		   " --dontclear   | -c : Do not clear the screen before and after displaying the image\n"
+ 		   " --donthide    | -u : Do not hide the cursor before and after displaying the image\n"
+ 		   " --noinfo      | -i : Supress image information\n"
++		   " --noinput     | -n : Advance on the timer without reading console input\n"
+ 		   " --stretch     | -f : Strech (using a simple resizing routine) the image to fit onto screen if necessary\n"
+ 		   " --colorstretch| -k : Strech (using a 'color average' resizing routine) the image to fit onto screen if necessary\n"
+ 		   " --enlarge     | -e : Enlarge the image to fit the whole screen if necessary\n"
+@@ -485,6 +495,7 @@ int main(int argc, char **argv)
+ 		{"alpha", 	no_argument, 	0, 'a'},
+ 		{"unhide",  	no_argument, 	0, 'u'},
+ 		{"noinfo",  	no_argument, 	0, 'i'},
++		{"noinput", 	no_argument, 	0, 'n'},
+ 		{"stretch", 	no_argument, 	0, 'f'},
+ 		{"colorstrech", no_argument, 	0, 'k'},
+ 		{"delay", 	required_argument, 0, 's'},
+@@ -501,7 +512,7 @@ int main(int argc, char **argv)
+ 		return(1);
+ 	}
+ 	
+-	while((c = getopt_long_only(argc, argv, "hcauifks:er", long_options, NULL)) != EOF)
++	while((c = getopt_long_only(argc, argv, "hcaunifks:er", long_options, NULL)) != EOF)
+ 	{
+ 		switch(c)
+ 		{
+@@ -523,6 +534,9 @@ int main(int argc, char **argv)
+ 			case 'i':
+ 				opt_image_info = 0;
+ 				break;
++			case 'n':
++				opt_noinput = 1;
++				break;
+ 			case 'f':
+ 				opt_stretch = 1;
+ 				break;
+@@ -564,7 +578,8 @@ int main(int argc, char **argv)
+ 		printf("\033[?25l");
+ 		fflush(stdout);
+ 	}
+-	
+-	setup_console(1);
++
++	if(!opt_noinput)
++		setup_console(1);
+ 
+ 	for(i = optind; argv[i]; )
+ 	{
+@@ -577,7 +592,8 @@ int main(int argc, char **argv)
+ 			i = optind;
+ 	}
+ 
+-	setup_console(0);
++	if(!opt_noinput)
++		setup_console(0);
+ 
+ 	if(opt_hide_cursor)
+ 	{
+-- 
+2.43.0

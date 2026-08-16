@@ -44,7 +44,7 @@ For LCD diagnosis, activate the display first so the report can observe live
 clocks, registers, and interrupts:
 
 ```sh
-fbpattern bars write
+display-pattern bars write
 displaydebug
 ```
 

@@ -1,5 +1,5 @@
-config BR2_PACKAGE_DISPLAYEXAMPLE
-	bool "Display example: PNG/JPEG/GIF/BMP slideshow"
+config BR2_PACKAGE_DISPLAY
+	bool "Display: PNG/JPEG/GIF/BMP slideshow"
 	select BR2_PACKAGE_FBV
 	select BR2_PACKAGE_FBV_PNG
 	select BR2_PACKAGE_FBV_JPEG
@@ -15,8 +15,26 @@ config BR2_PACKAGE_DISPLAYEXAMPLE
 	  The flash script automatically selects that device tree.
 
 	  When this package is not selected, the display drivers, fbv, image
-	  decoder libraries, slideshow script, sample images, and display
+	  decoder libraries, display utility, sample images, and display
 	  device-tree nodes are all excluded from the firmware images.
 
 	  The independent BR2_PACKAGE_DISPLAYDEBUG package may be selected beside
 	  this or any other example when reusable diagnostics are needed.
+
+if BR2_PACKAGE_DISPLAY
+
+config BR2_PACKAGE_DISPLAY_AUTOSTART
+	bool "Start the image slideshow automatically at boot"
+	default y
+	help
+	  Install the display-auto supervisor and start it from the
+	  minimal init script. The slideshow prefers supported images in the
+	  root of an automounted SD card and otherwise uses the bundled test
+	  images. It rechecks the source after every pass, so inserting or
+	  removing a card changes the source without rebooting.
+
+	  The viewer runs in non-interactive mode and does not consume input
+	  from the serial console. Use "display-auto status" to inspect
+	  it or "display-auto stop" before manual framebuffer testing.
+
+endif

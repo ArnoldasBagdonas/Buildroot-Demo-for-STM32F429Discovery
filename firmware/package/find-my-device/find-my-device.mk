@@ -20,12 +20,12 @@ BUSYBOX_KCONFIG_FRAGMENT_FILES += \
 	$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/busybox-find-my-device.config
 
 ifeq ($(BR2_PACKAGE_USBSERIALDEVICE),y)
-ifeq ($(BR2_PACKAGE_DISPLAYEXAMPLE),y)
+ifeq ($(BR2_PACKAGE_DISPLAY),y)
 FIND_MY_DEVICE_DTS = stm32f429disco-usbserialdevice-display-w5500
 else
 FIND_MY_DEVICE_DTS = stm32f429disco-usbserialdevice-w5500
 endif
-else ifeq ($(BR2_PACKAGE_DISPLAYEXAMPLE),y)
+else ifeq ($(BR2_PACKAGE_DISPLAY),y)
 FIND_MY_DEVICE_DTS = stm32f429disco-display-w5500
 else
 FIND_MY_DEVICE_DTS = stm32f429disco-custom-w5500

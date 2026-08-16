@@ -42,7 +42,7 @@ FIND_MY_DEVICE_ENABLED=false
 SPINAND_ENABLED=false
 SDCARD_ENABLED=false
 if [ -f "${CONFIG_FILE}" ] && \
-   grep -q '^BR2_PACKAGE_DISPLAYEXAMPLE=y$' "${CONFIG_FILE}"; then
+   grep -q '^BR2_PACKAGE_DISPLAY=y$' "${CONFIG_FILE}"; then
   DISPLAY_ENABLED=true
 fi
 if [ -f "${CONFIG_FILE}" ] && \

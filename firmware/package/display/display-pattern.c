@@ -16,13 +16,13 @@ static ssize_t read_display_mode(const char *path, char *mode, size_t size)
 
 	descriptor = open(path, O_RDONLY);
 	if (descriptor < 0) {
-		perror("fbpattern: open framebuffer mode list");
+		perror("display-pattern: open framebuffer mode list");
 		return -1;
 	}
 	count = read(descriptor, mode, size);
 	close(descriptor);
 	if (count < 0) {
-		perror("fbpattern: read framebuffer mode list");
+		perror("display-pattern: read framebuffer mode list");
 		return -1;
 	}
 	return count;
@@ -47,14 +47,14 @@ static int activate_display(void)
 		if (count < 0)
 			return -1;
 		if (!count) {
-			fprintf(stderr, "fbpattern: framebuffer has no display mode\n");
+			fprintf(stderr, "display-pattern: framebuffer has no display mode\n");
 			return -1;
 		}
 	}
 
 	descriptor = open(current_mode_path, O_WRONLY);
 	if (descriptor < 0) {
-		perror("fbpattern: open framebuffer mode for activation");
+		perror("display-pattern: open framebuffer mode for activation");
 		return -1;
 	}
 	for (offset = 0; offset < count;) {
@@ -63,14 +63,14 @@ static int activate_display(void)
 		if (result < 0 && errno == EINTR)
 			continue;
 		if (result <= 0) {
-			perror("fbpattern: activate framebuffer mode");
+			perror("display-pattern: activate framebuffer mode");
 			close(descriptor);
 			return -1;
 		}
 		offset += result;
 	}
 	close(descriptor);
-	printf("fbpattern: activated display mode %.*s", (int)count, mode);
+	printf("display-pattern: activated display mode %.*s", (int)count, mode);
 	if (mode[count - 1] != '\n')
 		putchar('\n');
 	return 0;
@@ -269,7 +269,7 @@ static int write_frame(int descriptor, const unsigned char *frame, size_t size)
 	size_t offset = 0;
 
 	if (lseek(descriptor, 0, SEEK_SET) < 0) {
-		perror("fbpattern: lseek");
+		perror("display-pattern: lseek");
 		return -1;
 	}
 	while (offset < size) {
@@ -278,7 +278,7 @@ static int write_frame(int descriptor, const unsigned char *frame, size_t size)
 		if (result < 0 && errno == EINTR)
 			continue;
 		if (result <= 0) {
-			perror("fbpattern: write");
+			perror("display-pattern: write");
 			return -1;
 		}
 		offset += (size_t)result;
@@ -293,15 +293,15 @@ static int map_frame(int descriptor, const unsigned char *frame, size_t size)
 	mapping = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED,
 		       descriptor, 0);
 	if (mapping == MAP_FAILED) {
-		perror("fbpattern: mmap");
+		perror("display-pattern: mmap");
 		return -1;
 	}
-	printf("fbpattern: mmap address %p\n", mapping);
+	printf("display-pattern: mmap address %p\n", mapping);
 	memcpy(mapping, frame, size);
 	if (msync(mapping, size, MS_SYNC) < 0)
-		perror("fbpattern: msync");
+		perror("display-pattern: msync");
 	if (munmap(mapping, size) < 0) {
-		perror("fbpattern: munmap");
+		perror("display-pattern: munmap");
 		return -1;
 	}
 	return 0;
@@ -314,7 +314,7 @@ static void usage(const char *program)
 		program);
 }
 
-int main(int argc, char **argv)
+int display_pattern_main(int argc, char **argv)
 {
 	const char *pattern = argc > 1 ? argv[1] : "bars";
 	const char *backend = argc > 2 ? argv[2] : "write";
@@ -337,16 +337,16 @@ int main(int argc, char **argv)
 		return 1;
 	descriptor = open("/dev/fb0", O_RDWR);
 	if (descriptor < 0) {
-		perror("fbpattern: open /dev/fb0");
+		perror("display-pattern: open /dev/fb0");
 		return 1;
 	}
 	if (ioctl(descriptor, FBIOGET_VSCREENINFO, &var) < 0) {
-		perror("fbpattern: FBIOGET_VSCREENINFO");
+		perror("display-pattern: FBIOGET_VSCREENINFO");
 		close(descriptor);
 		return 1;
 	}
 	if (ioctl(descriptor, FBIOGET_FSCREENINFO, &fix) < 0) {
-		perror("fbpattern: FBIOGET_FSCREENINFO");
+		perror("display-pattern: FBIOGET_FSCREENINFO");
 		close(descriptor);
 		return 1;
 	}
@@ -354,22 +354,22 @@ int main(int argc, char **argv)
 	bytes_per_pixel = (var.bits_per_pixel + 7U) / 8U;
 	frame_size = (size_t)fix.line_length * var.yres_virtual;
 	if (!bytes_per_pixel || bytes_per_pixel > 4 || !frame_size) {
-		fprintf(stderr, "fbpattern: unsupported framebuffer layout\n");
+		fprintf(stderr, "display-pattern: unsupported framebuffer layout\n");
 		close(descriptor);
 		return 1;
 	}
 
-	printf("fbpattern: %ux%u, virtual %ux%u, %u bpp, stride %u, %lu bytes\n",
+	printf("display-pattern: %ux%u, virtual %ux%u, %u bpp, stride %u, %lu bytes\n",
 	       var.xres, var.yres, var.xres_virtual, var.yres_virtual,
 	       var.bits_per_pixel, fix.line_length, (unsigned long)frame_size);
-	printf("fbpattern: R%u/%u G%u/%u B%u/%u A%u/%u, visual %u, backend %s\n",
+	printf("display-pattern: R%u/%u G%u/%u B%u/%u A%u/%u, visual %u, backend %s\n",
 	       var.red.offset, var.red.length, var.green.offset, var.green.length,
 	       var.blue.offset, var.blue.length, var.transp.offset,
 	       var.transp.length, fix.visual, backend);
 
 	frame = calloc(1, frame_size);
 	if (!frame) {
-		perror("fbpattern: calloc");
+		perror("display-pattern: calloc");
 		close(descriptor);
 		return 1;
 	}
@@ -393,6 +393,6 @@ int main(int argc, char **argv)
 	free(frame);
 	close(descriptor);
 	if (!result)
-		printf("fbpattern: displayed %s using %s\n", pattern, backend);
+		printf("display-pattern: displayed %s using %s\n", pattern, backend);
 	return result ? 1 : 0;
 }
