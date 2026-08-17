@@ -9,16 +9,9 @@ DISPLAY_SITE = $(BR2_EXTERNAL_FIRMWARE_PATH)/package/display
 DISPLAY_SITE_METHOD = local
 DISPLAY_DEPENDENCIES = fbv
 
-ifeq ($(BR2_PACKAGE_SDCARD),y)
-DISPLAY_SDCARD_FLAGS = -DWITH_SDCARD -DSDCARD_MULTICALL
-DISPLAY_SDCARD_SOURCE = \
-	$(BR2_EXTERNAL_FIRMWARE_PATH)/package/sdcard/sdcard.c
-endif
-
 define DISPLAY_BUILD_CMDS
 	$(TARGET_CC) $(TARGET_CFLAGS) $(TARGET_LDFLAGS) \
-		$(DISPLAY_SDCARD_FLAGS) -o $(@D)/display \
-		$(@D)/display.c $(@D)/display-pattern.c $(DISPLAY_SDCARD_SOURCE)
+		-o $(@D)/display $(@D)/display.c $(@D)/display-pattern.c
 endef
 
 # Linux is parsed before br2-external package makefiles. Appending here makes

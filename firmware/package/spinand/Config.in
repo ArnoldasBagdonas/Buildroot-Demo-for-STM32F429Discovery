@@ -1,21 +1,23 @@
 config BR2_PACKAGE_SPINAND
 	bool "W25N02KV SPI-NAND: 32 MiB UBIFS data volume"
-	depends on !BR2_PACKAGE_DISPLAY
-	depends on !BR2_PACKAGE_FIND_MY_DEVICE
+	depends on !BR2_PACKAGE_SDCARD
+	depends on !BR2_PACKAGE_GALLERY_SDCARD
 	help
-	  Enable a Winbond W25N02KV on SPI1 and expose the first 32 MiB as
+	  Enable a Winbond W25N02KV on SPI5 and expose the first 32 MiB as
 	  an UBI-managed UBIFS data volume. The package applies the required
 	  Linux and BusyBox configuration fragments, builds a dedicated DTB,
 	  and installs the spinand-ubi setup/status helper.
 
-	  The flash is connected to PA4 through PA7 on expansion header P2.
-	  It is never erased or formatted automatically. Run
+	  SPI5 clock and data are shared with the onboard gyroscope, LCD
+	  controller, and optional W5500. SPI-NAND uses its own PG3 chip select.
+	  The SD card remains isolated on SPI4. NAND is never erased or formatted
+	  automatically. Run
 	  "spinand-ubi format --yes" once after checking the wiring.
 
 	  See package/spinand/README.md for wiring and first-use instructions.
 
-comment "W25N02KV SPI-NAND is unavailable with Display (shared PA4/PA6 pins)"
-	depends on BR2_PACKAGE_DISPLAY
+comment "W25N02KV SPI-NAND is unavailable with SD card (storage image size)"
+	depends on BR2_PACKAGE_SDCARD
 
-comment "W25N02KV SPI-NAND is unavailable with Find My Device (XIP size limit)"
-	depends on BR2_PACKAGE_FIND_MY_DEVICE && !BR2_PACKAGE_DISPLAY
+comment "W25N02KV SPI-NAND is unavailable with Gallery SD support (storage image size)"
+	depends on BR2_PACKAGE_GALLERY_SDCARD

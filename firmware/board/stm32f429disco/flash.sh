@@ -46,6 +46,14 @@ if [ -f "${CONFIG_FILE}" ] && \
   DISPLAY_ENABLED=true
 fi
 if [ -f "${CONFIG_FILE}" ] && \
+   grep -q '^BR2_PACKAGE_GALLERY=y$' "${CONFIG_FILE}"; then
+  DISPLAY_ENABLED=true
+fi
+if [ -f "${CONFIG_FILE}" ] && \
+   grep -q '^BR2_PACKAGE_GALLERY_SDCARD=y$' "${CONFIG_FILE}"; then
+  SDCARD_ENABLED=true
+fi
+if [ -f "${CONFIG_FILE}" ] && \
    grep -q '^BR2_PACKAGE_USBSERIALDEVICE=y$' "${CONFIG_FILE}"; then
   USBSERIALDEVICE_ENABLED=true
 fi

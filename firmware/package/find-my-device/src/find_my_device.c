@@ -47,6 +47,9 @@
 #define LED_FLASH_MS UINT64_C(200)
 #define LED_PATTERN_PAUSE_MS UINT64_C(1200)
 #define SERVICE_TICK_NS 50000000L
+#ifdef FMD_CONSOLE_DEBUG
+#define DEBUG_NETWORK_INTERVAL_MS UINT64_C(5000)
+#endif
 
 typedef struct
 {
@@ -89,6 +92,11 @@ typedef struct
     bool confirmation_level;
     uint64_t confirmation_next_ms;
     bool link_up;
+#ifdef FMD_CONSOLE_DEBUG
+    bool led_level;
+    bool led_level_known;
+    bool led_test_active;
+#endif
 } PlatformControls;
 
 typedef struct
@@ -111,17 +119,27 @@ typedef struct
     uint64_t websocket_next_ms;
     uint64_t start_ms;
     bool announce_now;
+#ifdef FMD_CONSOLE_DEBUG
+    uint64_t debug_network_next_ms;
+#endif
     PlatformControls controls;
 } Application;
 
 static volatile sig_atomic_t stop_requested;
 static volatile sig_atomic_t confirm_requested;
 static volatile sig_atomic_t address_reload_requested;
+#ifdef FMD_CONSOLE_DEBUG
+static volatile sig_atomic_t led_test_requested;
+#endif
 
 static void handle_signal(int signal_number)
 {
     if (signal_number == SIGUSR1)
         confirm_requested = 1;
+#ifdef FMD_CONSOLE_DEBUG
+    else if (signal_number == SIGUSR2)
+        led_test_requested = 1;
+#endif
     else if (signal_number == SIGHUP)
         address_reload_requested = 1;
     else if (signal_number == SIGINT || signal_number == SIGTERM)
@@ -524,10 +542,14 @@ static bool save_persistent_state(Application *application)
     ok = fwrite(&application->persistent, sizeof(application->persistent), 1U, file) == 1U;
     if (ok)
         ok = fflush(file) == 0;
+    if (ok)
+        ok = fsync(fileno(file)) == 0;
     if (fclose(file) != 0)
         ok = false;
     if (ok)
         ok = rename(temporary, application->options.state_path) == 0;
+    if (ok)
+        sync();
     if (!ok)
         (void)unlink(temporary);
     return ok;
@@ -628,6 +650,21 @@ static bool gpio_write(int descriptor, bool high)
     return ioctl(descriptor, GPIO_V2_LINE_SET_VALUES_IOCTL, &values) == 0;
 }
 
+static void controls_write_led(PlatformControls *controls, bool high)
+{
+    if (controls->led_fd < 0 || !gpio_write(controls->led_fd, high))
+        return;
+#ifdef FMD_CONSOLE_DEBUG
+    controls->led_level = high;
+    controls->led_level_known = true;
+    if (controls->led_test_active)
+    {
+        printf("find_my_device_debug_led=%s\n", high ? "on" : "off");
+        fflush(stdout);
+    }
+#endif
+}
+
 static void controls_init(Application *application)
 {
     PlatformControls *controls = &application->controls;
@@ -652,7 +689,7 @@ static void controls_init(Application *application)
         fprintf(stderr, "find_my_device_led_unavailable chip=%s line=%u error=%s\n",
                 application->options.led_chip, application->options.led_line, strerror(errno));
     else
-        (void)gpio_write(controls->led_fd, false);
+        controls_write_led(controls, false);
 }
 
 static bool interface_link_up(const char *interface_name)
@@ -671,6 +708,53 @@ static bool interface_link_up(const char *interface_name)
     close(descriptor);
     return value == '1';
 }
+
+#ifdef FMD_CONSOLE_DEBUG
+static unsigned long long interface_stat(const char *interface_name, const char *statistic)
+{
+    char path[160];
+    char value[32];
+    char *end;
+    int descriptor;
+    ssize_t length;
+    unsigned long long result;
+
+    if (snprintf(path, sizeof(path), "/sys/class/net/%s/statistics/%s", interface_name,
+                 statistic) >= (int)sizeof(path))
+        return 0U;
+    descriptor = open(path, O_RDONLY);
+    if (descriptor < 0)
+        return 0U;
+    length = read(descriptor, value, sizeof(value) - 1U);
+    close(descriptor);
+    if (length <= 0)
+        return 0U;
+    value[length] = '\0';
+    errno = 0;
+    end = NULL;
+    result = strtoull(value, &end, 10);
+    return errno == 0 && end != value ? result : 0U;
+}
+
+static void debug_network_status(Application *application, uint64_t now)
+{
+    const char *interface_name = application->options.interface_name;
+
+    if (now < application->debug_network_next_ms)
+        return;
+    application->debug_network_next_ms = now + DEBUG_NETWORK_INTERVAL_MS;
+    printf("find_my_device_debug_net carrier=%u tx_packets=%llu tx_errors=%llu "
+           "rx_packets=%llu rx_errors=%llu rx_dropped=%llu rx_length_errors=%llu\n",
+           interface_link_up(interface_name) ? 1U : 0U,
+           interface_stat(interface_name, "tx_packets"),
+           interface_stat(interface_name, "tx_errors"),
+           interface_stat(interface_name, "rx_packets"),
+           interface_stat(interface_name, "rx_errors"),
+           interface_stat(interface_name, "rx_dropped"),
+           interface_stat(interface_name, "rx_length_errors"));
+    fflush(stdout);
+}
+#endif
 
 static void trigger_flashes(Application *application, unsigned int count)
 {
@@ -692,7 +776,7 @@ static void set_confirmation_pattern(Application *application, unsigned int flas
     controls->confirmation_next_ms = monotonic_ms() + LED_FLASH_MS;
     controls->flash_toggles = 0U;
     if (controls->led_fd >= 0)
-        (void)gpio_write(controls->led_fd, controls->confirmation_level);
+        controls_write_led(controls, controls->confirmation_level);
     printf("find_my_device_confirmation_pattern=%s\n",
            flashes == 1U ? "one-flash" : flashes == 2U ? "two-flash" : "idle");
     fflush(stdout);
@@ -745,7 +829,11 @@ static void controls_service(Application *application)
             controls->flash_level = !controls->flash_level;
             controls->flash_toggles--;
             controls->flash_next_ms = now + LED_FLASH_MS;
-            (void)gpio_write(controls->led_fd, controls->flash_level);
+            controls_write_led(controls, controls->flash_level);
+#ifdef FMD_CONSOLE_DEBUG
+            if (controls->flash_toggles == 0U)
+                controls->led_test_active = false;
+#endif
         }
         return;
     }
@@ -771,13 +859,30 @@ static void controls_service(Application *application)
                 controls->confirmation_level = true;
                 controls->confirmation_next_ms = now + LED_FLASH_MS;
             }
-            (void)gpio_write(controls->led_fd, controls->confirmation_level);
+            controls_write_led(controls, controls->confirmation_level);
         }
         return;
     }
-    (void)gpio_write(controls->led_fd,
-                     controls->link_up ? true : (now / 500U) % 2U != 0U);
+    controls_write_led(controls,
+                       controls->link_up ? true : (now / 500U) % 2U != 0U);
 }
+
+#ifdef FMD_CONSOLE_DEBUG
+static void debug_led_test(Application *application)
+{
+    PlatformControls *controls = &application->controls;
+    printf("find_my_device_debug_led_state=%s gpio=%s link=%s\n",
+           controls->led_level_known ? (controls->led_level ? "on" : "off") : "unknown",
+           controls->led_fd >= 0 ? "available" : "unavailable",
+           controls->link_up ? "up" : "down");
+    fflush(stdout);
+    if (controls->led_fd >= 0)
+    {
+        controls->led_test_active = true;
+        trigger_flashes(application, 3U);
+    }
+}
+#endif
 
 static bool send_all(int descriptor, const void *data_value, size_t length)
 {
@@ -1569,7 +1674,9 @@ static int application_run(Application *application)
         if (descriptors[2].revents & POLLIN)
         {
             uint64_t expirations;
-            (void)read(application->service_timer_fd, &expirations, sizeof(expirations));
+            ssize_t timer_read =
+                read(application->service_timer_fd, &expirations, sizeof(expirations));
+            (void)timer_read;
         }
         if (count == 4U && (descriptors[3].revents & (POLLERR | POLLHUP)))
         {
@@ -1579,14 +1686,28 @@ static int application_run(Application *application)
         if (confirm_requested)
         {
             confirm_requested = 0;
+#ifdef FMD_CONSOLE_DEBUG
+            fputs("find_my_device_debug_button=tap\n", stdout);
+            fflush(stdout);
+#endif
             confirm_physical(application);
         }
+#ifdef FMD_CONSOLE_DEBUG
+        if (led_test_requested)
+        {
+            led_test_requested = 0;
+            debug_led_test(application);
+        }
+#endif
         if (address_reload_requested)
         {
             address_reload_requested = 0;
             reload_interface_address(application);
         }
         controls_service(application);
+#ifdef FMD_CONSOLE_DEBUG
+        debug_network_status(application, now);
+#endif
         service_websocket(application);
         now = monotonic_ms();
         if (application->announce_now || now >= next_announcement)
@@ -1611,7 +1732,7 @@ static int application_run(Application *application)
         close(application->controls.button_fd);
     if (application->controls.led_fd >= 0)
     {
-        (void)gpio_write(application->controls.led_fd, false);
+        controls_write_led(&application->controls, false);
         close(application->controls.led_fd);
     }
     return 0;
@@ -1684,6 +1805,9 @@ int main(int argc, char **argv)
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
     signal(SIGUSR1, handle_signal);
+#ifdef FMD_CONSOLE_DEBUG
+    signal(SIGUSR2, handle_signal);
+#endif
     signal(SIGHUP, handle_signal);
     signal(SIGPIPE, SIG_IGN);
     return application_run(&application);

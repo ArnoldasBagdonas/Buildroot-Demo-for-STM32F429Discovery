@@ -6,7 +6,10 @@ export PATH="/bin:/sbin:/usr/bin:/usr/sbin" PS1='# '
 if [ -x /usr/sbin/spinand-ubi ]; then
 	/usr/sbin/spinand-ubi mount || echo "SPI-NAND: not initialized; run 'spinand-ubi format --yes' once"
 fi
-if [ -x /usr/sbin/sdcard ]; then
+if [ -x /usr/sbin/sdcard-auto ]; then
+	/usr/sbin/sdcard-auto &
+elif [ -L /usr/sbin/sdcard ] && [ -x /usr/sbin/sdcard ]; then
+	# Gallery owns sdcard as a symlink and keeps its original watcher policy.
 	/usr/sbin/sdcard watch &
 fi
 if [ -x /usr/bin/display-auto ]; then

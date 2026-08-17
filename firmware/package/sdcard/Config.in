@@ -1,7 +1,6 @@
 config BR2_PACKAGE_SDCARD
 	bool "SD card adapter: SPI-mode FAT storage"
-	depends on !BR2_PACKAGE_FIND_MY_DEVICE
-	depends on !BR2_PACKAGE_SPINAND
+	depends on !BR2_PACKAGE_GALLERY_SDCARD
 	help
 	  Enable a removable SD/SDHC card adapter on SPI4 and mount its first
 	  FAT16/FAT32 partition at /mnt/sdcard. The package applies the Linux
@@ -9,13 +8,41 @@ config BR2_PACKAGE_SDCARD
 	  and installs the sdcard status/mount helper.
 
 	  The display-safe wiring uses PE2, PE4, PE5, and PE6 on expansion
-	  header P1. It can be selected together with the Display example.
-	  Cards are never formatted by this package.
+	  header P1. Cards are never formatted by this package. It may be
+	  selected with Find My Device; the SD card stays on SPI4 while the
+	  W5500 uses the separate SPI5 controller. Select Gallery and its
+	  SD-card suboption to combine the SD-card and Display applets in one
+	  executable.
 
 	  See package/sdcard/README.md for wiring and usage instructions.
 
-comment "SD card adapter is unavailable with Find My Device (shared SPI4 pins)"
-	depends on BR2_PACKAGE_FIND_MY_DEVICE
+if BR2_PACKAGE_SDCARD
 
-comment "SD card adapter is unavailable with SPI-NAND (storage image size)"
-	depends on BR2_PACKAGE_SPINAND && !BR2_PACKAGE_FIND_MY_DEVICE
+menu "SD card options"
+
+config BR2_PACKAGE_SDCARD_AUTOMOUNT
+	bool "Mount an inserted SD card automatically at boot"
+	default y
+	help
+	  Install the sdcard-auto applet link and try to mount a card while
+	  the minimal init script starts. If periodic detection is disabled,
+	  this is a single mount attempt; a card inserted later must be mounted
+	  manually with "sdcard mount".
+
+config BR2_PACKAGE_SDCARD_AUTODETECT
+	bool "Periodically detect and automatically mount SD cards"
+	default y
+	depends on BR2_PACKAGE_SDCARD_AUTOMOUNT
+	help
+	  Make sdcard-auto run the continuous watcher instead of performing a
+	  single mount attempt. The watcher checks once per second, mounts a
+	  newly inserted card, and detaches a stale mount after card removal.
+
+	  Disable this to mount only a card that is already present at boot.
+
+endmenu
+
+endif
+
+comment "Standalone SD card is disabled by Gallery's built-in SD support"
+	depends on BR2_PACKAGE_GALLERY_SDCARD

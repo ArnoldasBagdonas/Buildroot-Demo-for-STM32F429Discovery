@@ -1,29 +1,29 @@
 /*
  * Conflict-free W5500 wiring for the STM32F429I-DISC1 expansion headers.
  *
- * SPI4: PE2=SCK, PE5=MISO, PE6=MOSI
- * GPIO: PE4=nSCS, PE3=nINT
+ * SPI5: PF7=SCK, PF8=MISO, PF9=MOSI
+ * GPIO: PD5=nSCS, PE3=nINT
  *
- * These pins are free on the board and are not used by the project's LCD,
- * SPI5 gyroscope, USB USER, serial, I2C, PWM, or GPIO examples.
+ * SPI5 is already used by the onboard gyroscope (CS0) and LCD controller
+ * (CS1); W5500 uses CS2 on PD5 and optional SPI-NAND uses CS3 on PG3.
+ * Keeping these devices off SPI4 isolates them from SD adapters whose level
+ * shifters do not release MISO while deselected.
+*/
+
+/* The stock SPI5 state is tuned for short onboard traces. External fan-out
+ * needs stronger SCK/MOSI edges and a defined idle level on shared MISO.
  */
-
-&pinctrl {
-	spi4_w5500_pins: spi4-w5500-0 {
-		pins1 {
-			pinmux = <STM32_PINMUX('E', 2, AF5)>, /* SPI4_SCK */
-				 <STM32_PINMUX('E', 6, AF5)>; /* SPI4_MOSI */
-			bias-disable;
-			drive-push-pull;
-			slew-rate = <2>;
-		};
-
-		pins2 {
-			pinmux = <STM32_PINMUX('E', 5, AF5)>; /* SPI4_MISO */
-			bias-disable;
-		};
+&spi5_pins {
+	pins1 {
+		slew-rate = <2>;
 	};
 
+	pins2 {
+		bias-pull-up;
+	};
+};
+
+&pinctrl {
 	w5500_irq_pin: w5500-irq-0 {
 		pins {
 			pinmux = <STM32_PINMUX('E', 3, GPIO)>;
@@ -32,21 +32,26 @@
 	};
 };
 
-&spi4 {
+&spi5 {
 	status = "okay";
 	pinctrl-names = "default";
-	pinctrl-0 = <&spi4_w5500_pins>;
-	cs-gpios = <&gpioe 4 GPIO_ACTIVE_LOW>;
+	pinctrl-0 = <&spi5_pins>;
+	/* CS0: gyroscope; CS1: LCD; CS2: W5500; CS3: SPI-NAND. */
+	cs-gpios = <&gpioc 1 GPIO_ACTIVE_LOW>,
+		     <&gpioc 2 GPIO_ACTIVE_LOW>,
+		     <&gpiod 5 GPIO_ACTIVE_LOW>,
+		     <&gpiog 3 GPIO_ACTIVE_LOW>;
 
-	w5500: ethernet@0 {
+	w5500: ethernet@2 {
 		compatible = "wiznet,w5500";
-		reg = <0>;
+		reg = <2>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&w5500_irq_pin>;
 		interrupt-parent = <&gpioe>;
 		interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
-		/* Match the proven PSoC target rate; jumper-wire signal integrity is
-		 * the practical limit here, not the W5500 silicon maximum.
+		/* Keep the last known-working 1 MHz rate for the shared SPI5 bus and
+		 * jumper-wire connection. The W5500 silicon supports higher rates,
+		 * but pairing generates frequent short status transactions.
 		 */
 		spi-max-frequency = <1000000>;
 	};

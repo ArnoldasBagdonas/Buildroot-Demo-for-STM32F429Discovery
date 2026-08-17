@@ -1,0 +1,3 @@
+#include "stm32f429disco-usbserialdevice-display.dts"
+#include "stm32f429disco-find-my-device.dtsi"
+#include "stm32f429disco-sdcard.dtsi"

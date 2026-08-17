@@ -14,32 +14,22 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "display.h"
+
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 
 static const char pid_file[] = "/run/display-auto.pid";
 static const char source_file[] = "/run/display-source";
 static const char builtin_directory[] = "/usr/share/display";
-static const char sdcard_directory[] = "/mnt/sdcard";
 
 static volatile sig_atomic_t stop_requested;
 static volatile sig_atomic_t slideshow_pid;
-
-int display_pattern_main(int argc, char **argv);
-#ifdef WITH_SDCARD
-int sdcard_main(int argc, char **argv);
-#endif
+static display_source_provider_t source_provider;
 
 struct image_list {
 	char **names;
 	size_t count;
 };
-
-static const char *program_name(const char *path)
-{
-	const char *slash = strrchr(path, '/');
-
-	return slash ? slash + 1 : path;
-}
 
 static void sleep_milliseconds(long milliseconds)
 {
@@ -95,26 +85,6 @@ static pid_t read_service_pid(void)
 static bool process_is_running(pid_t pid)
 {
 	return pid > 1 && (kill(pid, 0) == 0 || errno == EPERM);
-}
-
-static bool sdcard_is_mounted(void)
-{
-	char source[PATH_MAX];
-	char target[PATH_MAX];
-	FILE *mounts = fopen("/proc/mounts", "r");
-	bool mounted = false;
-
-	if (!mounts)
-		return false;
-	while (fscanf(mounts, "%1023s %1023s %*s %*s %*d %*d",
-	              source, target) == 2) {
-		if (!strcmp(target, sdcard_directory)) {
-			mounted = true;
-			break;
-		}
-	}
-	fclose(mounts);
-	return mounted;
 }
 
 static bool supported_image(const char *name)
@@ -195,6 +165,21 @@ static int collect_images(const char *directory, struct image_list *images)
 	closedir(stream);
 	qsort(images->names, images->count, sizeof(*images->names), compare_names);
 	return 0;
+}
+
+static bool directory_has_images(const char *directory)
+{
+	struct image_list images = { 0 };
+	bool found;
+
+	found = collect_images(directory, &images) == 0 && images.count > 0;
+	free_images(&images);
+	return found;
+}
+
+void display_set_source_provider(display_source_provider_t provider)
+{
+	source_provider = provider;
 }
 
 static int activate_display(void)
@@ -346,14 +331,12 @@ static int run_fbv(const char *directory, unsigned int delay,
 
 static const char *automatic_source(void)
 {
-	struct image_list images = { 0 };
+	if (source_provider) {
+		const char *directory = source_provider();
 
-	if (sdcard_is_mounted() && collect_images(sdcard_directory, &images) == 0 &&
-	    images.count) {
-		free_images(&images);
-		return sdcard_directory;
+		if (directory && directory_has_images(directory))
+			return directory;
 	}
-	free_images(&images);
 	return builtin_directory;
 }
 
@@ -380,10 +363,6 @@ static int run_worker(unsigned int delay)
 
 	for (count = 0; count < 10 && access("/dev/fb0", F_OK) < 0; ++count)
 		sleep_milliseconds(1000);
-	if (access("/usr/sbin/sdcard", X_OK) == 0) {
-		for (count = 0; count < 5 && !sdcard_is_mounted(); ++count)
-			sleep_milliseconds(1000);
-	}
 	while (!stop_requested) {
 		const char *source = automatic_source();
 
@@ -403,7 +382,7 @@ static void display_usage(void)
 	      stderr);
 }
 
-static int display_main(int argc, char **argv)
+int display_applet_main(int argc, char **argv)
 {
 	const char *directory = NULL;
 	const char *delay_text = "3";
@@ -436,7 +415,7 @@ static int display_main(int argc, char **argv)
 	if (!autoplay && access("/usr/bin/display-auto", X_OK) == 0)
 		stop_service(true);
 	if (access("/dev/fb0", F_OK) < 0) {
-		fputs("display: /dev/fb0 is missing; select Display, rebuild, and flash\n",
+		fputs("display: /dev/fb0 is missing; rebuild with display support and flash\n",
 		      stderr);
 		return 1;
 	}
@@ -444,8 +423,7 @@ static int display_main(int argc, char **argv)
 		if (explicit_directory)
 			fprintf(stderr, "display: no supported images in %s\n", directory);
 		else
-			fputs("display: no usable SD-card or built-in images were found\n",
-			      stderr);
+			fputs("display: no usable images were found\n", stderr);
 		free_images(&images);
 		return 1;
 	}
@@ -465,7 +443,7 @@ static void auto_usage(void)
 	      "[delay-seconds]|status}\n", stderr);
 }
 
-static int auto_main(int argc, char **argv)
+int display_auto_applet_main(int argc, char **argv)
 {
 	const char *command = argc > 1 ? argv[1] : "status";
 	const char *delay_text = argc > 2 ? argv[2] : "3";
@@ -492,7 +470,7 @@ static int auto_main(int argc, char **argv)
 			source[strcspn(source, "\r\n")] = '\0';
 			printf("Image source: %s\n", source);
 		} else {
-			puts("Image source: waiting for display or automount");
+			puts("Image source: waiting for display");
 		}
 		if (file)
 			fclose(file);
@@ -543,6 +521,14 @@ static int auto_main(int argc, char **argv)
 	return 0;
 }
 
+#ifndef DISPLAY_MULTICALL
+static const char *program_name(const char *path)
+{
+	const char *slash = strrchr(path, '/');
+
+	return slash ? slash + 1 : path;
+}
+
 int main(int argc, char **argv)
 {
 	const char *name = program_name(argv[0]);
@@ -550,10 +536,7 @@ int main(int argc, char **argv)
 	if (!strcmp(name, "display-pattern"))
 		return display_pattern_main(argc, argv);
 	if (!strcmp(name, "display-auto"))
-		return auto_main(argc, argv);
-#ifdef WITH_SDCARD
-	if (!strcmp(name, "sdcard"))
-		return sdcard_main(argc, argv);
-#endif
-	return display_main(argc, argv);
+		return display_auto_applet_main(argc, argv);
+	return display_applet_main(argc, argv);
 }
+#endif

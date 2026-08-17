@@ -1,6 +1,6 @@
 # W25N02KV SPI-NAND with a 32 MiB UBIFS volume
 
-The `BR2_PACKAGE_SPINAND` package adds an external Winbond W25N02KV on SPI1.
+The `BR2_PACKAGE_SPINAND` package adds an external Winbond W25N02KV on SPI5.
 It exposes the first 32 MiB of the chip as an MTD partition named `ubi`, enables
 the Linux UBI and UBIFS layers, installs compact BusyBox management tools, and
 builds a `-spinand.dtb` that `make flash` selects automatically.
@@ -10,13 +10,15 @@ one-time operation, because it destroys everything in the 32 MiB partition.
 After initialization, the image automatically attaches and mounts the `data`
 volume at `/mnt/spinand` on every boot.
 
-This is a standalone storage image. It cannot be selected together with
-`BR2_PACKAGE_FIND_MY_DEVICE`: Linux 6.6 with both UBIFS and the IPv4/W5500
-stack exceeds the STM32F429's 2 MiB internal XIP-flash limit. The SPI-NAND
-fragment therefore removes the network stack, and Kconfig prevents the unsafe
-combination. The display example is also unavailable because its LTDC signals
-use PA4 and PA6. USB serial may still be selected, but its resulting image must
-independently pass the size check below.
+The standalone SPI-NAND image removes the unused network stack to conserve the
+STM32F429's 2 MiB internal XIP flash. When Find My Device is also selected, its
+IPv4/W5500 fragment is reapplied and the combined `-w5500-spinand.dtb` is
+built. Enable Find My Device's gzip-initramfs option for that size-heavy
+composition, and still verify the final image against the size check below.
+Standalone SD card and Gallery's built-in SD support remain excluded by
+Kconfig for image size, not wiring. Display, embedded-image Gallery, and USB
+serial have no pin conflict with this wiring, but every resulting image must
+independently pass the size check.
 
 ## Capacity used by this image
 
@@ -41,42 +43,55 @@ Connect the board and flash grounds together. Place a 100 nF decoupling
 capacitor directly between the flash VCC and GND if the breakout board does not
 already include one.
 
-| W25N02KV signal | STM32 signal                     | Board connector        |
+| W25N02KV signal | STM32 signal                     | Discovery connector    |
 |-----------------|----------------------------------|------------------------|
-| `CS#`           | PA4 / SPI1 chip select           | pin 1                  |
-| `CLK`           | PA5 / SPI1_SCK                   | pin 6                  |
-| `DO/IO1`        | PA6 / SPI1_MISO                  | pin 2                  |
-| `DI/IO0`        | PA7 / SPI1_MOSI                  | pin 5                  |
-| `VCC`           | 3.3 V                            | pin 8                  |
-| `GND`           | GND                              | pin 4                  |
+| `CS#`           | PG3, active low                  | P2 pin 61              |
+| `CLK`           | PF7 / SPI5_SCK                   | P2 pin 6               |
+| `DO/IO1`        | PF8 / SPI5_MISO                  | P2 pin 5               |
+| `DI/IO0`        | PF9 / SPI5_MOSI                  | P2 pin 8               |
+| `VCC`           | 3.3 V                            | P2 pin 1 or pin 2      |
+| `GND`           | GND                              | P2 pin 11 or pin 29    |
 | `WP#/IO2`       | pull up to 3.3 V through 10 kOhm | not connected to STM32 |
 | `HOLD#/IO3`     | pull up to 3.3 V through 10 kOhm | not connected to STM32 |
 
 Many SPI-NAND modules already pull up `WP#/IO2` and `HOLD#/IO3`; check the
 module schematic before adding duplicate resistors. Bare WSON devices require
-the pull-ups for the single-data-line mode used here. Keep CLK and data wires
-short. The DT starts conservatively at 10 MHz.
+the pull-ups for the single-data-line mode used here. A pull-up on `CS#` is
+also recommended so the flash remains deselected while the GPIO is being
+initialized. Keep CLK and data wires short. The DT starts conservatively at
+10 MHz.
 
 Power off the board before changing any connection. Double-check VCC and GND
 with the module's own pinout; breakout-board pin order is not standardized.
 
 ## Hardware compatibility
 
-The current prohibition against selecting SPI-NAND together with the W5500
-Find My Device example is a software/image-size restriction, not a hardware
-conflict. The two devices use independent SPI controllers and non-overlapping
-pins.
+SPI-NAND shares SPI5 clock and data with the onboard gyroscope, LCD controller,
+and optional W5500. Their active-low chip selects are PC1 (`reg = <0>`), PC2
+(`reg = <1>`), PD5 (`reg = <2>`), and PG3 (`reg = <3>`) respectively. PG3 is
+free I/O on P2 pin 61 and is not used by the current examples. The SD card is
+the only device on SPI4, so a non-tristating SD adapter cannot interfere with
+SPI-NAND or W5500 MISO.
+
+The Linux SPI core serializes SPI5 messages, changes the clock for each device,
+and prevents simultaneous chip selection. A NAND erase/program or read can
+delay W5500 servicing, while heavy Ethernet traffic can reduce NAND throughput.
+The LCD primarily uses SPI5 for controller setup; framebuffer pixels travel
+through LTDC. Current configured maxima are 10 MHz for NAND, 4 MHz for SD, and
+1 MHz for W5500.
 
 | Feature | SPI-NAND coexistence | Pins |
 |---------|----------------------|------|
-| W5500 | Yes | SPI4: PE2–PE6 |
+| W5500 | Yes when the image fits | SPI5 shared, NAND CS PG3, W5500 CS PD5 and IRQ PE3 |
+| SD card | Yes in hardware; unavailable in Kconfig because of image size | Separate SPI4 PE2/PE5/PE6, SD CS PE4 |
 | USB CDC | Yes | PB12/PB14/PB15 |
-| SPI5 gyroscope | Yes | PF7/PF8/PF9 |
+| SPI5 gyroscope | Yes | SPI5 shared; gyro CS PC1 |
 | I²C3 | Yes | PA8/PC9 |
 | PWM | Yes | PB4 |
 | USART1/UART5 | Yes | PA9/PA10 and PC12/PD2 |
-| LCD display | No with current wiring | LCD conflicts on PA4 and PA6 |
-| DCMI/internal RMII Ethernet | Conflicts if enabled | Uses some PA4–PA7 pins |
+| LCD display / Gallery | Yes | LTDC; LCD, NAND, and W5500 share SPI5 with separate CS lines |
+| DCMI | Yes with SPI-NAND alone | DCMI does not use PF7/PF8/PF9/PG3 |
+| Internal RMII Ethernet | Pins do not conflict; networking is disabled in this image | RMII does not use PF7/PF8/PF9/PG3 |
 
 ## Build the image
 
@@ -115,8 +130,8 @@ The selected image should contain a dedicated DTB:
 test -s buildroot/output/images/stm32f429disco-custom-spinand.dtb
 ```
 
-If USB serial is also selected, the prefix changes to match that feature but
-still ends in `-spinand.dtb`.
+If Display, Gallery, or USB serial is also selected, the prefix changes to
+match that feature but still ends in `-spinand.dtb`.
 
 The STM32 internal flash has a strict XIP kernel limit. Check it before every
 flash:
@@ -215,7 +230,8 @@ do not reformat merely because power was removed without an unmount.
 ## Relevant implementation files
 
 - `firmware/board/stm32f429disco/dts/stm32f429disco-spinand.dtsi` defines
-  SPI1 pins, the flash node, and the fixed 32 MiB partition.
+  shared SPI5 pins, PG3 chip select, the flash node, and the fixed 32 MiB
+  partition.
 - `firmware/board/stm32f429disco/linux-spinand.config` enables MTD, SPI-NAND,
   UBI, and UBIFS only while this package is selected.
 - `firmware/board/stm32f429disco/busybox-spinand.config` enables the compact

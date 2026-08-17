@@ -1,0 +1,31 @@
+From 85f98ddc2d07837f859b7ade3cb89ae3b6376207 Mon Sep 17 00:00:00 2001
+From: Buildroot Demo <buildroot-demo@example.com>
+Date: Sun, 16 Aug 2026 12:00:00 +0000
+Subject: [PATCH] fbv: clear framebuffer before each image
+
+fbv only overwrites the rectangle occupied by the current image. When two
+aspect-preserving images have different shapes, pixels outside the new image
+therefore retain parts of the previous slide.
+
+Clear the mapped framebuffer to black before every blit. This gives each
+image clean letterbox or pillarbox bars and also gives transparent image
+regions a predictable background. Keep this independent of --dontclear,
+which controls terminal escape sequences and must remain enabled so fbv does
+not erase the serial console.
+---
+ fb_display.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+--- a/fb_display.c
++++ b/fb_display.c
+@@ -223,6 +223,8 @@ void blit2FB(int fh, void *fbbuff, unsig
+ 		return;
+ 	}
+ 
++	memset(fb, 0, scr_xs * scr_ys * cpp);
++
+ 	if(cpp == 1)
+ 	{
+ 	    get8map(fh, &map_back);
+-- 
+2.43.0

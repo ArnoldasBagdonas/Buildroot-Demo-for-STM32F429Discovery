@@ -1,0 +1,37 @@
+#!/bin/sh
+
+set -e
+
+if [ ! -r /var/run/find-my-device.pid ]; then
+	echo "find-my-device is not running" >&2
+	exit 1
+fi
+
+FMD_PID=$(cat /var/run/find-my-device.pid)
+
+case "${1:-}" in
+	button|button-press|button-tap)
+		kill -USR1 "${FMD_PID}"
+		echo "Simulated one USER-button tap (PID ${FMD_PID})."
+		;;
+	led|led-test)
+		kill -USR2 "${FMD_PID}"
+		echo "Requested the three-flash LD3 self-test (PID ${FMD_PID})."
+		;;
+	net|network)
+		FMD_IFACE=${2:-eth0}
+		FMD_STATS=/sys/class/net/${FMD_IFACE}/statistics
+		if [ ! -d "${FMD_STATS}" ]; then
+			echo "Network interface ${FMD_IFACE} is unavailable." >&2
+			exit 1
+		fi
+		for FMD_STAT in tx_packets tx_errors rx_packets rx_errors rx_dropped rx_length_errors; do
+			read -r FMD_VALUE < "${FMD_STATS}/${FMD_STAT}"
+			echo "${FMD_STAT}=${FMD_VALUE}"
+		done
+		;;
+	*)
+		echo "Usage: find-my-device-debug {button|led|net [interface]}" >&2
+		exit 2
+		;;
+esac

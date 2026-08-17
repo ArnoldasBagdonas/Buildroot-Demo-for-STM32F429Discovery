@@ -7,7 +7,9 @@
  * P1 pin 13 / PE4: card chip select
  *
  * The four pins are not used by the LTDC/display pinctrl state. The adapter
- * has no card-detect or write-protect signal, so the MMC core polls the slot.
+ * is the only device on SPI4, isolating adapters whose level shifter does not
+ * release MISO when CS is high. It has no card-detect or write-protect signal,
+ * so the MMC core polls the slot.
  */
 
 &pinctrl {
@@ -31,6 +33,7 @@
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&spi4_sdcard_pins>;
+	/* SD is intentionally the only SPI4 device. */
 	cs-gpios = <&gpioe 4 GPIO_ACTIVE_LOW>;
 
 	sdcard: mmc@0 {

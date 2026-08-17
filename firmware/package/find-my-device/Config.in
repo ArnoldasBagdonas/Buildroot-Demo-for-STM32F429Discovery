@@ -1,11 +1,53 @@
 config BR2_PACKAGE_FIND_MY_DEVICE
 	bool "Find My Device: W5500, mDNS, and onboarding API"
+	depends on !BR2_PACKAGE_GALLERY_SDCARD
 	help
 	  Install a Linux implementation of the FreeRTOS Find My Device
-	  reference target. It enables a W5500 on conflict-free SPI4 pins,
+	  reference target. It enables a W5500 on shared SPI5 with its own
+	  chip select, separate from the isolated SPI4 SD-card bus,
 	  obtains an IPv4 address, advertises _device-setup._tcp.local over
 	  mDNS, and serves the API v3 HTTP/OAuth/WebSocket onboarding flow.
 
 	  The device ID and locally administered MAC address are derived from
 	  the STM32 factory unique ID. Optional external confirmation-button
 	  and status-LED GPIOs avoid every pin used by the existing examples.
+
+	  When the standalone SD-card package is also selected, Find My Device
+	  stores its persistent state below /mnt/sdcard. It still works without
+	  SD-card support and then keeps state in the RAM-backed root filesystem.
+
+if BR2_PACKAGE_FIND_MY_DEVICE
+
+menu "Find My Device options"
+
+config BR2_PACKAGE_FIND_MY_DEVICE_COMPRESS_INITRAMFS
+	bool "Compress the initramfs with gzip"
+	help
+	  Store the embedded root filesystem as a gzip-compressed archive in
+	  internal flash. Linux expands it into RAM during boot; the kernel
+	  remains an XIP image and continues executing directly from flash.
+
+	  Enable this when Find My Device is combined with size-heavy packages,
+	  especially SPI-NAND. The final xipImage must still fit within the
+	  STM32F429's 2,048,000-byte project limit.
+
+config BR2_PACKAGE_FIND_MY_DEVICE_CONSOLE_DEBUG
+	bool "Enable console button and LED debug controls"
+	help
+	  Install find-my-device-debug for hardware-independent testing from
+	  the serial console. Its button command simulates one complete USER
+	  button press and its led command runs a three-flash LD3 self-test
+	  while reporting LED state changes on the console. The net command
+	  prints interface counters, and the daemon reports them every five
+	  seconds so failures can be diagnosed even when console input is not
+	  available.
+
+	  Leave this disabled in production images. The daemon's debug signal
+	  handlers and console messages are omitted when this option is off.
+
+endmenu
+
+endif
+
+comment "Find My Device is unavailable with Gallery SD-card composition"
+	depends on BR2_PACKAGE_GALLERY_SDCARD

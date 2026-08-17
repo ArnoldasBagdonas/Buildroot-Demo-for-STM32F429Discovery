@@ -9,13 +9,26 @@ event in that window can fail to wake the stopped transmit queue, leading to a
 watchdog reset and lost DHCP REQUEST packets.
 
 For W5500, leave only receive events routed to the interrupt pin and poll the
-SENDOK bit from the existing process-context transmit worker. This follows the
-completion sequence documented by WIZnet and leaves W5100/W5200 unchanged.
+SENDOK status from the existing process-context transmit worker. Clear stale
+SENDOK status before issuing SEND, then acknowledge the new completion and wake
+the queue. If completion does not arrive before the polling timeout, schedule
+the driver's existing restart worker instead of leaving the transmit queue
+stopped indefinitely. Keep the W5500 interrupt path from acknowledging a
+masked SENDOK event when a receive event arrives at the same time; the transmit
+worker owns waking the transmit queue.
+Use an ordered transfer workqueue as well: W5500 register and ring-pointer
+operations form multi-step transactions, and the SPI calls sleep between those
+steps. Serializing RX, TX, and receive-filter work prevents another worker from
+interleaving a second transaction on this uniprocessor target. Queue recovery
+on that same workqueue so a timeout cannot reset the chip while RX work is
+updating its ring pointer.
+This follows the completion sequence documented by WIZnet and leaves
+W5100/W5200 unchanged.
 
 Signed-off-by: Buildroot STM32F429 demo <noreply@example.com>
 ---
- drivers/net/ethernet/wiznet/w5100.c | 22 ++++++++++++++++++++++
- 1 file changed, 22 insertions(+)
+ drivers/net/ethernet/wiznet/w5100.c | 28 ++++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
 
 --- a/drivers/net/ethernet/wiznet/w5100.c
 +++ b/drivers/net/ethernet/wiznet/w5100.c
@@ -39,19 +52,24 @@ Signed-off-by: Buildroot STM32F429 demo <noreply@example.com>
  	w5100_command(priv, S0_CR_OPEN);
  	w5100_enable_intr(priv);
  }
+@@ -830 +836 @@
+-		schedule_work(&priv->restart_work);
++		queue_work(priv->xfer_wq, &priv->restart_work);
 @@ -835,7 +841,9 @@
  static void w5100_tx_skb(struct net_device *ndev, struct sk_buff *skb)
  {
  	struct w5100_priv *priv = netdev_priv(ndev);
 +	unsigned long timeout;
  	u16 offset;
-+	int ir;
++	int socket_ir;
  
  	offset = w5100_read16(priv, W5100_S0_TX_WR(priv));
  	w5100_writebuf(priv, offset, skb->data, skb->len);
-@@ -845,6 +853,20 @@
+@@ -845,6 +853,25 @@
  	dev_kfree_skb(skb);
  
++	if (priv->ops->chip_id == W5500)
++		w5100_write(priv, W5100_S0_IR(priv), S0_IR_SENDOK);
  	w5100_command(priv, S0_CR_SEND);
 +
 +	if (priv->ops->chip_id != W5500)
@@ -59,16 +77,27 @@ Signed-off-by: Buildroot STM32F429 demo <noreply@example.com>
 +
 +	timeout = jiffies + msecs_to_jiffies(100);
 +	do {
-+		ir = w5100_read(priv, W5100_S0_IR(priv));
-+		if (ir & S0_IR_SENDOK) {
++		socket_ir = w5100_read(priv, W5100_S0_IR(priv));
++		if (socket_ir & S0_IR_SENDOK) {
 +			w5100_write(priv, W5100_S0_IR(priv), S0_IR_SENDOK);
 +			netif_wake_queue(ndev);
 +			return;
 +		}
 +		usleep_range(1000, 2000);
 +	} while (!time_after(jiffies, timeout));
++
++	netdev_warn(ndev, "W5500 transmit completion timed out; restarting\n");
++	queue_work(priv->xfer_wq, &priv->restart_work);
  }
  
  static void w5100_tx_work(struct work_struct *work)
+@@ -955,0 +981,2 @@ static irqreturn_t w5100_interrupt(int irq, void *ndev_instance)
++	if (priv->ops->chip_id == W5500)
++		ir &= S0_IR_RECV;
+@@ -1193,2 +1220,2 @@
+-	priv->xfer_wq = alloc_workqueue("%s", WQ_MEM_RECLAIM, 0,
+-					netdev_name(ndev));
++	priv->xfer_wq = alloc_ordered_workqueue("%s", WQ_MEM_RECLAIM,
++						netdev_name(ndev));
 -- 
 2.50.1

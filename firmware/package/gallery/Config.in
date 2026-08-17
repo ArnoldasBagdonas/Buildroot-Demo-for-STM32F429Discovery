@@ -1,0 +1,63 @@
+config BR2_PACKAGE_GALLERY_PROVIDES_DISPLAY
+	bool
+
+config BR2_PACKAGE_GALLERY
+	bool "Gallery: PNG/JPEG/GIF/BMP slideshow"
+	select BR2_PACKAGE_GALLERY_PROVIDES_DISPLAY
+	select BR2_PACKAGE_FBV
+	select BR2_PACKAGE_FBV_PNG
+	select BR2_PACKAGE_FBV_JPEG
+	select BR2_PACKAGE_FBV_GIF
+	help
+	  Install the Display slideshow as one BusyBox-style executable with
+	  gallery, display, and display-pattern applet names. Its optional
+	  features add automatic startup and SD-card image support.
+
+	  By default Gallery uses only its embedded images and builds the
+	  display device tree. Optional SD-card support adds the automounter
+	  applet to the same executable and builds the combined Display +
+	  SD-card device tree.
+
+	  Selecting Gallery disables the standalone Display example. The
+	  standalone SD-card package may coexist while Gallery's built-in SD
+	  support is disabled. Enabling built-in support disables the standalone
+	  package so that the sdcard command has exactly one owner.
+
+if BR2_PACKAGE_GALLERY
+
+menu "Gallery options"
+
+config BR2_PACKAGE_GALLERY_AUTOSTART
+	bool "Start the gallery automatically at boot"
+	default y
+	help
+	  Install display-auto and gallery-auto links. The minimal init script
+	  starts display-auto at boot.
+
+config BR2_PACKAGE_GALLERY_SDCARD
+	bool "Build SD-card support into the Gallery executable"
+	help
+	  Link the sdcard applet into Gallery and add MMC-over-SPI/FAT support,
+	  the automount service, and the combined Display + SD-card device tree.
+	  This disables the standalone SD-card package because both packages
+	  would otherwise install /usr/sbin/sdcard.
+
+	  This option is disabled by default so the basic Gallery example has
+	  no SD-card runtime or storage-stack dependency.
+
+if BR2_PACKAGE_GALLERY_SDCARD
+
+config BR2_PACKAGE_GALLERY_SDCARD_IMAGES
+	bool "Use images from an automatically mounted SD card"
+	help
+	  Prefer supported images in the root of /mnt/sdcard when it is mounted
+	  and contains images. Fall back to the embedded images otherwise.
+
+	  Leave this disabled to demonstrate the built-in SD-card applet while
+	  keeping the slideshow source fixed at /usr/share/display.
+
+endif
+
+endmenu
+
+endif

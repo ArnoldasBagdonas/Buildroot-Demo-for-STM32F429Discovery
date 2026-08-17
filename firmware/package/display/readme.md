@@ -5,9 +5,8 @@ This package enables the STM32F429Discovery LCD only when
 configuration and device tree, `fbv`, the native display utility, and compact PNG,
 JPEG, and GIF test cards. `fbv` also accepts BMP files without another decoder
 library. The optional, default-enabled autostart supervisor begins a slideshow
-at boot. It prefers images in the root of an automounted SD card and falls back
-to the bundled test cards when SD support, a mounted card, or usable card
-images are absent.
+of the bundled test cards at boot. The standalone package has no SD-card build
+or runtime dependency; the separate Gallery example demonstrates composition.
 
 The core display fragment retains procfs because Linux 6.1 framebuffer
 registration needs `/proc/fb` in order to create `/dev/fb0`. Extra diagnostic
@@ -30,10 +29,9 @@ included in the firmware.
 The nested `BR2_PACKAGE_DISPLAY_AUTOSTART` option demonstrates a
 conditional package feature. It defaults to enabled and installs
 `display-auto` as a link to the native Display multicall program. The board's
-minimal `init` script detects that executable
-and starts it after the independent `sdcard watch` automounter. Disabling the
-option removes the supervisor, while the manual `display` command and
-all display drivers remain available.
+minimal `init` script detects and starts that executable. Disabling the option
+removes the supervisor, while the manual `display` command and all display
+drivers remain available.
 
 The conditional
 [linux-display.config](../../board/stm32f429disco/linux-display.config) fragment
@@ -57,12 +55,20 @@ describes the board wiring:
 - LTDC is enabled with `ltdc_pins_b` and connected to the panel through graph
   endpoints.
 - SPI5 chip select 0 on PC1 remains assigned to the gyroscope. Chip select 1
-  on PC2 controls the LCD, and PD13 is its data/command signal.
+  on PC2 controls the LCD, optional W5500 uses chip select 2 on PD5, and
+  optional SPI-NAND uses chip select 3 on PG3. PD13 is the LCD data/command
+  signal.
 - The panel uses its board-specific `st,sf-tc240t-9370-t` compatibility and a
   maximum 10 MHz three-wire SPI control interface.
 - The UART examples use UART5 on PC12/PD2 and RS-485 DE on PD4. These free
   expansion-header pins do not overlap LTDC, so serial and display examples
   can be selected together.
+- SPI-NAND shares SPI5 on PF7/PF8/PF9 and uses PG3 chip select. Linux
+  serializes its messages with LCD control, the gyroscope, and optional W5500.
+  Display and SPI-NAND can be selected together subject to the internal-flash
+  size check; framebuffer pixels themselves travel through LTDC, not SPI5.
+- The SD adapter remains alone on SPI4 PE2/PE4/PE5/PE6, so an adapter with a
+  non-tristating MISO level shifter cannot interfere with any SPI5 device.
 
 No LCD clock is assigned in the display DTB. The stock ILI9341 panel mode and
 STM32 clock framework select the pixel clock during modeset. `CONFIG_PM` lets
@@ -78,10 +84,7 @@ framebuffer `mmap()` implementation.
 The native `display` command activates the first advertised framebuffer mode
 before starting `fbv`. This first modeset initializes the panel, enables LTDC
 scanout, and turns on the runtime-managed LCD clock. With no explicit image
-directory, it selects the first usable source in this order:
-
-1. supported images in the root of a mounted `/mnt/sdcard`;
-2. bundled images in `/usr/share/display`.
+directory, the standalone example always uses `/usr/share/display`.
 
 The directory is intentionally not searched recursively, making it easy to
 teach and predict which files enter the slideshow. Supported filename suffixes
@@ -93,6 +96,15 @@ image by height, and an image matching the panel's aspect ratio by both. The
 image is therefore completely visible within the 240x320 framebuffer without
 cropping or distortion. Smaller images are enlarged with the same
 aspect-preserving behavior.
+
+Before drawing each slide, the board-local project patch
+[`0003-clear-framebuffer-before-each-image.patch`](../../board/stm32f429disco/patches/fbv/0003-clear-framebuffer-before-each-image.patch)
+clears the framebuffer to black. Consequently, unused space around a fitted
+image becomes a clean letterbox or pillarbox border instead of retaining parts
+of the previous slide. This must happen inside `fbv`, because `display` starts
+it once and `fbv` owns subsequent slide transitions. The framebuffer clear is
+independent of `fbv -c`; that option still prevents terminal clear sequences
+from erasing serial-console scrollback.
 
 Fitting after a full decode is too late for a multi-megapixel JPEG on a small
 no-MMU target. The project patch
@@ -112,12 +124,15 @@ navigation keys. This is an example of using `BR2_GLOBAL_PATCH_DIR` to adapt an
 upstream Buildroot package without modifying the Buildroot checkout.
 
 The target commands `display`, `display-auto`, and `display-pattern` are three
-symbolic links to one native multicall executable. In a combined Display + SD
-image, `/usr/sbin/sdcard` links to it as well. Dispatching on the invoked name
-keeps the teaching commands clear while avoiding duplicate static runtimes in
-the initramfs. `display.c` owns source discovery, service control, and `fbv`
-supervision; `display-pattern.c` supplies the direct framebuffer patterns; and
-`sdcard.c` is included only when SD support is selected.
+symbolic links to one native Display executable. Dispatching on the invoked
+name keeps the teaching commands clear. `display.c` owns embedded-source
+selection, service control, and `fbv` supervision; `display-pattern.c` supplies
+the direct framebuffer patterns. No SD-card source or package rule is compiled
+into this standalone executable.
+
+[`display.h`](display.h) exposes the applet entry points and a source-provider
+callback. Gallery uses that build-time interface to link the same Display code
+into its own multicall executable without adding a runtime shared library.
 
 The optional `BR2_PACKAGE_DISPLAYDEBUG` selection is intentionally independent.
 Its debugfs, logging, diagnostic applets, and `displaydebug` command are not
@@ -154,24 +169,10 @@ source with:
 display-auto status
 ```
 
-A Display-only image reports `/usr/share/display`. A Display + SD image
-reports `/mnt/sdcard` whenever that filesystem is mounted and its root contains
-at least one supported image. Otherwise it reports the built-in directory.
-
-To demonstrate SD-card composition, select both `BR2_PACKAGE_DISPLAY`
-and `BR2_PACKAGE_SDCARD`, rebuild, and flash. Copy images to the card's root:
-
-```text
-/photo.jpg
-/diagram.PNG
-/animation.gif
-```
-
-The SD automounter mounts the card at `/mnt/sdcard`. After the current pass,
-the supervisor notices the new source and switches to the card. Removing the
-card safely with `sdcard unmount` makes the next pass use built-in images;
-removing and reinserting it re-enables automount as described in the SD-card
-package documentation.
+The standalone Display image always reports `/usr/share/display`. Select
+`BR2_PACKAGE_GALLERY` instead when teaching multicall linking; enable its
+default-off `BR2_PACKAGE_GALLERY_SDCARD` suboption when also teaching SD-card
+automount and runtime source selection.
 
 Service controls are:
 
@@ -201,7 +202,7 @@ display 5
 display 2 /path/to/images
 ```
 
-Passing an explicit directory bypasses SD-card and built-in source selection.
+Passing an explicit directory bypasses the embedded default.
 The same fitting behavior is used for every source.
 
 ## Known-good ST hardware demonstration

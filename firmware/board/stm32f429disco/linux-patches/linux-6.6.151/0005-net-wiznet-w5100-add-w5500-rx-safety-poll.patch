@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Buildroot STM32F429 demo <noreply@example.com>
+Date: Mon, 17 Aug 2026 01:30:00 +0300
+Subject: [PATCH] net: wiznet: w5100: add W5500 receive safety poll
+
+The W5500 INTn output is active low, while the STM32F429 EXTI path can miss a
+new receive indication when the socket interrupt is masked during SPI receive
+work. The pending frame then remains in the W5500 and no new edge is generated.
+
+Keep interrupt-driven receive as the fast path, but use the existing W5500 PHY
+poll worker to queue the normal RX worker every 100 ms. Run the delayed worker
+on the ordered SPI transfer workqueue as well, so PHY reads cannot interleave
+with ring operations. queue_work naturally coalesces requests when IRQ receive
+work is already pending. This provides a bounded recovery path without changing
+other WIZnet chips.
+
+Require three consecutive PHY samples before changing carrier state. This
+filters isolated SPI read glitches while still reporting a real cable change
+within 300 ms.
+
+Signed-off-by: Buildroot STM32F429 demo <noreply@example.com>
+---
+ drivers/net/ethernet/wiznet/w5100.c | 15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
+
+--- a/drivers/net/ethernet/wiznet/w5100.c
++++ b/drivers/net/ethernet/wiznet/w5100.c
+@@ -176,6 +176,7 @@ struct w5100_priv {
+ 	struct work_struct setrx_work;
+ 	struct work_struct restart_work;
+ 	struct delayed_work link_work;
++	u8 link_debounce;
+ };
+ 
+ /************************************************************************
+@@ -757,6 +757,8 @@ static u32 w5100_get_link(struct net_device *ndev)
+ 	return w5100_link_is_up(priv);
+ }
+ 
++static void w5100_rx_work(struct work_struct *work);
++
+ static void w5100_link_work(struct work_struct *work)
+ {
+ 	struct w5100_priv *priv = container_of(to_delayed_work(work),
+@@ -767,15 +769,19 @@ static void w5100_link_work(struct work_struct *work)
+ 	if (!netif_running(ndev))
+ 		return;
+ 	link_up = w5100_link_is_up(priv);
+-	if (link_up != netif_carrier_ok(ndev)) {
++	if (link_up == netif_carrier_ok(ndev))
++		priv->link_debounce = 0;
++	else if (++priv->link_debounce >= 3) {
++		priv->link_debounce = 0;
+ 		netif_info(priv, link, ndev, "link is %s\n",
+ 			   link_up ? "up" : "down");
+ 		if (link_up)
+ 			netif_carrier_on(ndev);
+ 		else
+ 			netif_carrier_off(ndev);
+ 	}
+-	schedule_delayed_work(&priv->link_work, HZ);
++	queue_work(priv->xfer_wq, &priv->rx_work);
++	queue_delayed_work(priv->xfer_wq, &priv->link_work, msecs_to_jiffies(100));
+ }
+ 
+ static u32 w5100_get_msglevel(struct net_device *ndev)
+@@ -1101,7 +1104,7 @@ static int w5100_open(struct net_device *ndev)
+ 		netif_carrier_off(ndev);
+ 	if (!gpio_is_valid(priv->link_gpio) &&
+ 	    priv->ops->chip_id == W5500)
+-		schedule_delayed_work(&priv->link_work, HZ);
++		queue_delayed_work(priv->xfer_wq, &priv->link_work, msecs_to_jiffies(100));
+ 	return 0;
+ }
+ 
+@@ -1369,7 +1372,8 @@ static int w5100_resume(struct device *dev)
+ 			netif_carrier_off(ndev);
+ 		if (!gpio_is_valid(priv->link_gpio) &&
+ 		    priv->ops->chip_id == W5500)
+-			schedule_delayed_work(&priv->link_work, HZ);
++			queue_delayed_work(priv->xfer_wq, &priv->link_work,
++					   msecs_to_jiffies(100));
+ 	}
+ 	return 0;
+ }
+-- 
+2.50.1

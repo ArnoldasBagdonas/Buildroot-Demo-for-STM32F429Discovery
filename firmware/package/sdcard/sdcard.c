@@ -20,6 +20,15 @@ struct card_device {
 	char name[32];
 };
 
+#if defined(SDCARD_AUTOMOUNT_PERIODIC) || defined(SDCARD_AUTOMOUNT_ONCE)
+static const char *program_name(const char *path)
+{
+	const char *slash = strrchr(path, '/');
+
+	return slash ? slash + 1 : path;
+}
+#endif
+
 static void watch_signal(int signal_number)
 {
 	(void)signal_number;
@@ -205,6 +214,22 @@ static void usage(void)
 int sdcard_main(int argc, char **argv)
 {
 	const char *command = argc > 1 ? argv[1] : "status";
+
+#if defined(SDCARD_AUTOMOUNT_PERIODIC) || defined(SDCARD_AUTOMOUNT_ONCE)
+	const char *name = program_name(argv[0]);
+
+	if (!strcmp(name, "sdcard-auto")) {
+		if (argc != 1) {
+			fputs("Usage: sdcard-auto\n", stderr);
+			return 2;
+		}
+#if defined(SDCARD_AUTOMOUNT_PERIODIC)
+		return watch_card();
+#else
+		return mount_card(false);
+#endif
+	}
+#endif
 
 	if (argc > 2) {
 		usage();

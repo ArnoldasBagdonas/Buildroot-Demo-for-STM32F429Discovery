@@ -89,21 +89,37 @@ diagnostic package may be selected in addition to any one example:
 | `ioexample6` | `BR2_PACKAGE_IOEXAMPLE6` | `ioexample6` | Interactive PWM test on TIM3_CH1/PB4 |
 | `ioexample7` | `BR2_PACKAGE_IOEXAMPLE7` | `ioexample7` | UART test, defaulting to `/dev/ttySTM1` |
 | `ioexample8` | `BR2_PACKAGE_IOEXAMPLE8` | `ioexample8` | RS-485 test, defaulting to `/dev/ttySTM1` |
-| `display` | `BR2_PACKAGE_DISPLAY` | `display`, `display-auto` | LCD slideshow with built-in images and optional automounted SD-card images |
+| `gallery` | `BR2_PACKAGE_GALLERY` | `gallery`, `display`; optional `sdcard` | BusyBox-style image viewer with optional SD-card composition |
+| `display` | `BR2_PACKAGE_DISPLAY` | `display`, `display-auto` | Independent LCD slideshow using embedded images |
 | `displaydebug` | `BR2_PACKAGE_DISPLAYDEBUG` | `displaydebug` | Optional reusable kernel and peripheral diagnostics |
 | `usbserialdevice` | `BR2_PACKAGE_USBSERIALDEVICE` | `usbserialchat` | USB CDC ACM data port with a loopback test utility |
-| `spinand` | `BR2_PACKAGE_SPINAND` | `spinand-ubi` | W25N02KV with a 32 MiB UBI/UBIFS data volume |
-| `sdcard` | `BR2_PACKAGE_SDCARD` | `sdcard` | Display-safe SPI4 SD/SDHC card with FAT storage |
+| `spinand` | `BR2_PACKAGE_SPINAND` | `spinand-ubi` | Shared-SPI5 W25N02KV with a 32 MiB UBI/UBIFS data volume |
+| `sdcard` | `BR2_PACKAGE_SDCARD` | `sdcard` | Independent SPI4 SD/SDHC automount example |
 
 Wiring, build, initialization, and persistence-test instructions for the
 SPI-NAND package are in [`spinand/README.md`](spinand/README.md).
 The display-compatible SD-card wiring and usage are in
 [`sdcard/README.md`](sdcard/README.md).
 
+Gallery's built-in SD support and standalone SD are alternative owners of the
+same `sdcard` command. Selecting `BR2_PACKAGE_GALLERY_SDCARD` disables
+standalone `BR2_PACKAGE_SDCARD`; its nested
+`BR2_PACKAGE_GALLERY_SDCARD_IMAGES` option separately controls whether the
+slideshow prefers card images. Gallery and standalone SD may coexist while
+Gallery's built-in support remains disabled. Built-in Gallery SD support also
+enables gzip initramfs compression. The standalone SD options menu provides
+`BR2_PACKAGE_SDCARD_AUTOMOUNT` and its periodic
+`BR2_PACKAGE_SDCARD_AUTODETECT` refinement; both default to enabled to preserve
+the original removable-card behavior.
+
+Find My Device and standalone SD card remain independent selectable packages.
+When both are selected, SD remains alone on SPI4 while W5500 uses shared SPI5,
+and Find My Device automatically stores state under `/mnt/sdcard`.
+
 Optional: confirm the selection before building:
 
 ```bash
-grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|DISPLAY(_AUTOSTART|DEBUG)?|USBSERIALDEVICE|SPINAND|SDCARD|PERIPHERY)=y$' buildroot/.config
+grep -E '^BR2_PACKAGE_(HELLOMK(CPP)?|SLEEPEXAMPLE|IOEXAMPLE[1-8]|GALLERY(_AUTOSTART|_SDCARD(_IMAGES)?)?|DISPLAY(_AUTOSTART|DEBUG)?|USBSERIALDEVICE|SPINAND|SDCARD(_AUTOMOUNT|_AUTODETECT)?|FIND_MY_DEVICE(_COMPRESS_INITRAMFS)?|PERIPHERY)=y$' buildroot/.config
 ```
 
 Examples 3 through 7 automatically select `BR2_PACKAGE_PERIPHERY`. It is an
@@ -111,7 +127,7 @@ internal build dependency, so you only need to select the example itself.
 
 UART examples use `/dev/ttySTM1`, backed by UART5 on PC12 (TX) and PD2 (RX).
 UART5 is enabled in every board DTB and can coexist with `display` and
-the W5500 SPI4 interface. The USART1 ST-Link serial console remains available
+the W5500 SPI5 interface. The USART1 ST-Link serial console remains available
 in every image as `/dev/ttySTM0`.
 
 Selecting `usbserialdevice` makes the USB USER micro-AB connector enumerate on
@@ -165,10 +181,12 @@ ioexample8 /dev/ttySTM1
 ioexample6 0 0
 ```
 
-The default-enabled display autostart option begins the slideshow during boot.
-It uses supported images in the root of an automounted `/mnt/sdcard` when the
-SD-card package is selected and usable images are present; otherwise it uses
-the bundled demonstration images. Check the running source with:
+The default-enabled Display autostart option begins an embedded-image
+slideshow during boot. Gallery has its own default-enabled autostart option and
+also uses embedded images by default. Its default-off built-in SD option adds
+the automounter; the nested SD-image option separately enables runtime
+selection between `/mnt/sdcard` and that fallback. Check either running service
+with:
 
 ```sh
 display-auto status
@@ -200,9 +218,8 @@ aspect ratio; smaller images are enlarged. BMP decoding is built into `fbv`,
 so it does not select another image library. A BMP test card is not bundled
 because its uncompressed pixels would consume unnecessary flash.
 
-The script uses BusyBox `/bin/sh` syntax rather than requiring GNU Bash, so
-selecting the example does not add a Bash interpreter to the image. Check the
-display device and bundled files with:
+The command is a native C multicall program and does not add a Bash
+interpreter. Check the display device and bundled files with:
 
 ```sh
 ls -l /dev/fb0

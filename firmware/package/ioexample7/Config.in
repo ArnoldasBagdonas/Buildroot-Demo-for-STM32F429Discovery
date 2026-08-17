@@ -19,5 +19,5 @@ config BR2_PACKAGE_IOEXAMPLE7
         https://github.com/vsergeev/c-periphery
 
       The example uses UART5 on PC12 (TX) and PD2 (RX). These expansion-header
-      pins do not overlap the LCD LTDC signals or the W5500 SPI4 wiring, so
+      pins do not overlap the LCD LTDC signals or the W5500 SPI5 wiring, so
       this package can be combined with display and find-my-device.

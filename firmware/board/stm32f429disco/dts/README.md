@@ -184,6 +184,15 @@ The minimal profile exposes the onboard `L3GD20` gyroscope on `SPI5` chip select
 The base device tree keeps the LCD and its second chip select disabled. Selecting
 `BR2_PACKAGE_DISPLAY` builds the separate
 `stm32f429disco-display.dtb`; `make flash` then selects that DTB automatically.
+Selecting `BR2_PACKAGE_GALLERY` also builds the display DTB while leaving the
+standalone Display package disabled. Gallery's default-off
+`BR2_PACKAGE_GALLERY_SDCARD` built-in-support option selects
+`stm32f429disco-display-sdcard.dtb`, adding the SPI4 SD-card slot.
+
+Selecting `BR2_PACKAGE_SPINAND` appends `-spinand` to the active minimal,
+Display, or USB + Display DTB. The flash shares SPI5 clock and data on
+PF7/PF8/PF9 with the onboard devices and optional W5500, and uses its dedicated
+PG3 chip select (`reg = <3>`). The SD adapter remains the only SPI4 device.
 
 **Device Tree** (`stm32f429disco-custom.dts`)
 
@@ -227,13 +236,15 @@ minimal `linux.config`.
 
 The base DTS enables UART5 on PC12/PD2, which does not overlap the LCD's LTDC
 signals. The display DTS includes that base and adds only the LCD nodes. The
-package makefile adds the display DTS to the Linux build only while the package
-is selected. Consequently, a normal build contains neither the display nodes
-nor the display kernel and root-filesystem payload.
+Display package makefile adds the display DTS only for the standalone example;
+the Gallery package adds either the display DTS or, when requested, the
+combined Display + SD-card DTS.
+Consequently, a normal build contains neither the display nodes nor the display
+kernel and root-filesystem payload.
 
-On a display-example image, `/dev/fb0` is the compatibility framebuffer used
-by the display utility. See `firmware/package/readme.md` for the complete
-selection, build, flash, and manual test procedure.
+On a Display or Gallery image, `/dev/fb0` is the compatibility framebuffer
+used by the display applet. See `firmware/package/readme.md` for package
+selection and `firmware/package/gallery/README.md` for the composition pattern.
 
 ### MEM
 

@@ -1,5 +1,6 @@
 config BR2_PACKAGE_DISPLAY
 	bool "Display: PNG/JPEG/GIF/BMP slideshow"
+	depends on !BR2_PACKAGE_GALLERY_PROVIDES_DISPLAY
 	select BR2_PACKAGE_FBV
 	select BR2_PACKAGE_FBV_PNG
 	select BR2_PACKAGE_FBV_JPEG
@@ -21,20 +22,28 @@ config BR2_PACKAGE_DISPLAY
 	  The independent BR2_PACKAGE_DISPLAYDEBUG package may be selected beside
 	  this or any other example when reusable diagnostics are needed.
 
+	  Select Gallery for the BusyBox-style executable example. Its optional
+	  SD-card suboption combines Display and SD-card applets in that binary.
+
+comment "Standalone Display is disabled by Gallery"
+	depends on BR2_PACKAGE_GALLERY
+
 if BR2_PACKAGE_DISPLAY
+
+menu "Display options"
 
 config BR2_PACKAGE_DISPLAY_AUTOSTART
 	bool "Start the image slideshow automatically at boot"
 	default y
 	help
 	  Install the display-auto supervisor and start it from the
-	  minimal init script. The slideshow prefers supported images in the
-	  root of an automounted SD card and otherwise uses the bundled test
-	  images. It rechecks the source after every pass, so inserting or
-	  removing a card changes the source without rebooting.
+	  minimal init script. The standalone Display example always uses its
+	  bundled test images unless an explicit directory is passed to display.
 
 	  The viewer runs in non-interactive mode and does not consume input
 	  from the serial console. Use "display-auto status" to inspect
 	  it or "display-auto stop" before manual framebuffer testing.
+
+endmenu
 
 endif

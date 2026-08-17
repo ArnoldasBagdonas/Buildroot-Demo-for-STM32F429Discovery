@@ -3,14 +3,17 @@
 The `BR2_PACKAGE_SDCARD` package connects a removable SD or SDHC card to SPI4,
 enables Linux's `mmc_spi` block driver and VFAT filesystem, installs the
 `sdcard` helper, and builds a `-sdcard.dtb` that `make flash` selects
-automatically. A detected FAT16/FAT32 card is mounted at `/mnt/sdcard` during
-boot and mounted again after a later removal and insertion. The package never
+automatically. Its options independently control a boot-time mount attempt and
+continued periodic insertion/removal detection. Both behaviors default to
+enabled for compatibility with the original example. The package never
 partitions or formats a card.
 
-The chosen SPI4 pins do not overlap the STM32F429 Discovery LCD, so
-`BR2_PACKAGE_SDCARD` and `BR2_PACKAGE_DISPLAY` can be selected together.
-The package is mutually exclusive with Find My Device because its W5500 uses
-the same SPI4 signals, and with the separate SPI-NAND storage image.
+The chosen SPI4 pins do not overlap the STM32F429 Discovery LCD. The standalone
+package remains independent of Display; select `BR2_PACKAGE_GALLERY` for the
+supported Gallery image. It can be selected with Find My Device: the card
+stays on SPI4 and W5500 uses SPI5, so the external modules do not share MISO.
+The package remains mutually exclusive with the separate
+SPI-NAND storage image because of the internal-flash image-size limit.
 
 ## How the helper is integrated
 
@@ -25,12 +28,13 @@ sleeping, signals, and device inspection. This keeps the long-running watcher
 independent of optional BusyBox applets and demonstrates when a Buildroot
 package should install a target program rather than a shell script.
 
-When Display and SD card are selected together, `display.mk` compiles the SD
-helper into the Display multicall executable and `sdcard.mk` installs
-`/usr/sbin/sdcard` as a symbolic link to it. The commands remain independent,
-but the combined firmware stores the static C runtime only once. With SD card
-selected by itself, `sdcard.mk` builds `sdcard.c` as a standalone executable.
-The command line and automount behavior are the same in both builds.
+`sdcard.mk` always compiles and installs a standalone `/usr/sbin/sdcard`; it
+does not inspect the Display selection, depend on Display, or install a link to
+another package's executable. When boot automounting is selected, it also
+installs `/usr/sbin/sdcard-auto` as a link to that executable. Gallery is a
+separate package owner that links the same `sdcard_main()` applet into its own
+executable. Gallery does not consume these standalone-package options and
+retains its existing `sdcard watch` startup policy.
 
 Selecting the package also makes the rest of the storage stack available:
 
@@ -38,15 +42,16 @@ Selecting the package also makes the rest of the storage stack available:
   support in the kernel.
 - `sdcard.mk` adds the matching `-sdcard` device tree to the kernel build. The
   device tree describes the SPI4 bus, chip-select, and MMC-over-SPI device.
-- The root filesystem `init` script starts `/usr/sbin/sdcard watch &` when the
-  helper is present, before opening the interactive shell.
+- The root filesystem `init` script starts `/usr/sbin/sdcard-auto &` only when
+  the package installed that optional link. The selected build mode makes it
+  perform either one mount attempt or the continuous watcher.
 
 At runtime, the kernel creates block devices such as `/dev/mmcblk0` after it
-detects a card. The background `sdcard watch` process checks once per second
-for a base MMC device under `/sys/class/block`. It uses partition 1, for
-example `/dev/mmcblk0p1`, when that block device exists; otherwise it uses the
-whole card, `/dev/mmcblk0`. It calls the kernel mount interface directly to
-mount the selected device as `vfat` at `/mnt/sdcard`.
+detects a card. A mount operation uses partition 1, for example
+`/dev/mmcblk0p1`, when that block device exists; otherwise it uses the whole
+card, `/dev/mmcblk0`. It calls the kernel mount interface directly to mount the
+selected device as `vfat` at `/mnt/sdcard`. In periodic mode, the background
+watcher checks once per second for a base MMC device under `/sys/class/block`.
 
 The helper supports these commands:
 
@@ -55,15 +60,16 @@ The helper supports these commands:
 | `sdcard` or `sdcard status` | Reports the automount state, detected device, size in 512-byte sectors, selected mount device, and mount status. |
 | `sdcard mount` | Enables automount and immediately mounts the detected card. |
 | `sdcard unmount` | Disables automount, calls `sync`, and safely unmounts the card if it is mounted. |
-| `sdcard watch` | Runs the continuous automount loop used by the boot-time `init` script. |
+| `sdcard watch` | Manually runs the same continuous automount loop selected by periodic boot detection. |
+| `sdcard-auto` | Internal boot applet link. It mounts once or watches continuously according to the package configuration. |
 
-The automount setting is stored in the volatile file
-`/run/sdcard-automount`. A manual `sdcard unmount` keeps automount disabled so
-the watcher does not immediately remount the same card. Removing the card
-resets the state to enabled, allowing the next insertion to mount
-automatically. If a mounted card is removed without first being unmounted,
-the watcher lazily detaches the stale mount, but this cannot prevent FAT
-filesystem corruption caused by unsafe removal.
+When the periodic watcher is running, its automount setting is stored in the
+volatile file `/run/sdcard-automount`. A manual `sdcard unmount` keeps
+automount disabled so the watcher does not immediately remount the same card.
+Removing the card resets the state to enabled, allowing the next insertion to
+mount automatically. If a mounted card is removed without first being
+unmounted, the watcher lazily detaches the stale mount, but this cannot prevent
+FAT filesystem corruption caused by unsafe removal.
 
 The helper only detects and mounts block devices. It does not configure the
 SPI hardware, load the correct device tree, partition a card, create a
@@ -92,7 +98,7 @@ undervolt the card. If such a module is powered from 5 V, first verify that its
 pins listed above must remain 3.3 V logic in every case.
 
 There is no card-detect pin on the four-signal adapter. The kernel therefore
-polls the slot. The DT starts conservatively at 4 MHz for jumper-wire use.
+polls the slot. The DT uses a conservative SPI clock of up to 4 MHz.
 
 ## Hardware compatibility
 
@@ -102,31 +108,34 @@ and SPI5, so their pins and controllers do not overlap. Keep the SD card on
 these SPI4 pins when using the display; an SPI1 SD-card wiring on PA4–PA7 would
 conflict with the LCD signals on PA4 and PA6.
 
-The W5500 Find My Device example has a real hardware conflict with the SD card:
-both devices use SPI4 on PE2, PE5, and PE6, and both current wiring definitions
-use PE4 as the active-low chip select. They therefore cannot be connected or
-selected together as currently defined. Sharing the SPI bus would require a
-different chip-select pin for one device and a combined device tree, neither
-of which this project provides.
+The W5500 Find My Device example uses SPI5 on PF7, PF8, and PF9, with PD5 chip
+select and PE3 interrupt. It does not share SPI4 or the SD adapter's MISO
+signal. This is deliberate: some low-cost SD adapters keep MISO driven through
+their level-shifter circuit even while PE4 chip select is high. Separate chip
+selects cannot repair that electrical behavior, whereas separate controllers
+and data pins do. Selecting both packages builds a combined
+`-w5500-sdcard.dtb`; Find My Device then stores persistent state under
+`/mnt/sdcard/find-my-device` when the card mounts successfully.
 
 The current prohibition against selecting the SD card together with SPI-NAND
-is instead a software/image-size restriction, not a hardware conflict. The two
-storage devices use independent SPI controllers and non-overlapping pins.
+is a software/image-size restriction, not a hardware conflict. SPI-NAND uses
+SPI5 with PG3 chip select while SD remains the only device on SPI4. Their
+transfers can proceed on separate controllers.
 
 | Feature | SD-card coexistence | Pins |
 |---------|---------------------|------|
-| W5500 | No with current wiring | SPI4 PE2/PE5/PE6 and chip select PE4 are shared |
-| SPI-NAND | Yes in hardware; unavailable in Kconfig | SPI1: PA4–PA7 |
+| W5500 | Yes | Separate SPI5 PF7/PF8/PF9; W5500 CS PD5 and IRQ PE3 |
+| SPI-NAND | Yes in hardware; unavailable in Kconfig | Separate SPI5 PF7/PF8/PF9; NAND CS PG3 |
 | USB CDC | Yes | PB12/PB14/PB15 |
-| SPI5 gyroscope | Yes | PF7/PF8/PF9 |
+| SPI5 gyroscope | Yes | SPI5 shared with W5500/SPI-NAND; gyro CS PC1 |
 | I²C3 | Yes | PA8/PC9 |
 | PWM | Yes | PB4 |
 | USART1/UART5 | Yes | PA9/PA10 and PC12/PD2 |
-| LCD display | Yes | LTDC does not use PE2/PE4/PE5/PE6 |
+| LCD display | Yes | LTDC plus SPI5 LCD CS PC2; SPI core serializes W5500/NAND traffic |
 | DCMI | No with current pinctrl | DCMI data input D7 conflicts on PE6 |
 | Internal RMII Ethernet | Pins do not conflict; networking is disabled in this image | RMII does not use PE2/PE4/PE5/PE6 |
 
-## Build with the display example
+## Build the standalone example
 
 Run this inside the devcontainer, where the repository is `/workspace`:
 
@@ -137,36 +146,72 @@ make configure
 make menuconfig
 ```
 
-Enable both of these symbols and save the configuration:
+Enable this symbol and save the configuration:
 
 ```text
-BR2_PACKAGE_DISPLAY
 BR2_PACKAGE_SDCARD
+```
+
+Selecting it reveals an `SD card options` menu:
+
+```text
+[ ] Compress the initramfs with gzip
+[*] Mount an inserted SD card automatically at boot
+[*] Periodically detect and automatically mount SD cards
+```
+
+The periodic option appears only when boot automounting is enabled. With both
+defaults selected, `sdcard-auto` runs the watcher and also handles a card that
+is present during boot. Disable periodic detection for one boot-time attempt,
+or disable boot automounting to install only the manual `sdcard` command.
+
+The initramfs compression option is disabled by default; enable it when this
+example is combined with enough other packages to approach the internal-flash
+limit:
+
+```text
+BR2_PACKAGE_SDCARD_COMPRESS_INITRAMFS
 ```
 
 Then build without running `make configure` again:
 
 ```sh
 make build_all
-test -s buildroot/output/images/stm32f429disco-display-sdcard.dtb
+test -s buildroot/output/images/stm32f429disco-custom-sdcard.dtb
 stat -c 'xipImage size: %s bytes' buildroot/output/images/xipImage
 ```
 
 Do not flash if `xipImage` exceeds 2,048,000 bytes. `make flash` enforces this
 limit, reads the selection, and automatically uses
-`stm32f429disco-display-sdcard.dtb`.
+`stm32f429disco-custom-sdcard.dtb`.
 
-With the Display example's default autostart option enabled, boot starts the
-SD automounter first and then starts the slideshow supervisor. Supported PNG,
-JPEG, GIF, and BMP files placed directly in the card's root are selected
-automatically. Images are scaled to fit the LCD while preserving aspect ratio;
-large JPEGs are first reduced by libjpeg during decoding to limit peak RAM use.
-If the card is absent or contains no supported root-level images, the slideshow
-uses its bundled test images instead. Inspect the live choice with:
+The SD package always applies the shared compact kernel fragment, which removes
+unused features but does not choose an initramfs compression format. The
+`BR2_PACKAGE_SDCARD_COMPRESS_INITRAMFS` option additionally applies
+`linux-initramfs-gzip.config`. With it enabled, the embedded root filesystem is
+gzip-compressed in flash and expanded into RAM at boot. The kernel itself
+remains XIP and continues executing from flash. With the option disabled, the
+embedded initramfs remains uncompressed.
 
-```sh
-display-auto status
+For the single-executable LCD composition, select `BR2_PACKAGE_GALLERY` and
+`BR2_PACKAGE_GALLERY_SDCARD`. Gallery's built-in support disables this
+standalone package and prevents duplicate ownership of the `sdcard` command.
+Its nested `BR2_PACKAGE_GALLERY_SDCARD_IMAGES` option independently decides
+whether the slideshow reads card images. Gallery builds the combined DTB and
+owns the multicall executable and all applet links. See
+[`../gallery/README.md`](../gallery/README.md).
+
+For persistent Find My Device state, enable both standalone symbols:
+
+```text
+BR2_PACKAGE_FIND_MY_DEVICE
+BR2_PACKAGE_SDCARD
 ```
+
+This does not make either package select the other. The combination builds the
+dual-controller `-w5500-sdcard.dtb`; wire W5500 to SPI5 with PD5 chip select
+as documented
+in [`../find-my-device/README.md`](../find-my-device/README.md).
 
 ## Prepare and use a card
 
@@ -192,11 +237,12 @@ writes:
 sdcard unmount
 ```
 
-Automount remains disabled while that card is still present, so it will not
-immediately undo the manual unmount. Removing the card re-arms automount; its
-next insertion is detected by the kernel poller and mounted within a few
-seconds. Pulling a mounted card without `sdcard unmount` can corrupt its FAT
-filesystem.
+With periodic detection selected, automount remains disabled while that card
+is still present, so it will not immediately undo the manual unmount. Removing
+the card re-arms automount; its next insertion is detected and mounted within a
+few seconds. Without periodic detection, insertions after boot require the
+manual command below. Pulling a mounted card without `sdcard unmount` can
+corrupt its FAT filesystem.
 
 To mount it again:
 
