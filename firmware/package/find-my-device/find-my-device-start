@@ -13,6 +13,8 @@ FMD_DEVICE_MODEL=${FMD_DEVICE_MODEL:-FINDER-R01}
 FMD_STATE_FILE=${FMD_STATE_FILE:-auto}
 FMD_SDCARD_STATE_FILE=${FMD_SDCARD_STATE_FILE:-/mnt/sdcard/find-my-device/state}
 FMD_SDCARD_WAIT=${FMD_SDCARD_WAIT:-10}
+FMD_SPINAND_STATE_FILE=${FMD_SPINAND_STATE_FILE:-/mnt/spinand/find-my-device/state}
+FMD_SPINAND_WAIT=${FMD_SPINAND_WAIT:-10}
 FMD_BUTTON_CHIP=${FMD_BUTTON_CHIP:-/dev/gpiochip0}
 FMD_BUTTON_LINE=${FMD_BUTTON_LINE:-0}
 FMD_BUTTON_ACTIVE_LOW=${FMD_BUTTON_ACTIVE_LOW:-no}
@@ -21,10 +23,11 @@ FMD_LED_LINE=${FMD_LED_LINE:-13}
 FMD_GPIO_ENABLED=${FMD_GPIO_ENABLED:-yes}
 FMD_DHCP_WAIT=${FMD_DHCP_WAIT:-30}
 
-fmd_sdcard_mounted()
+fmd_mountpoint_mounted()
 {
+	FMD_CHECK_MOUNT=$1
 	while read -r FMD_MOUNT_SOURCE FMD_MOUNT_TARGET FMD_MOUNT_REST; do
-		if [ "${FMD_MOUNT_TARGET}" = /mnt/sdcard ]; then
+		if [ "${FMD_MOUNT_TARGET}" = "${FMD_CHECK_MOUNT}" ]; then
 			return 0
 		fi
 	done < /proc/mounts
@@ -41,17 +44,44 @@ if [ "${FMD_STATE_FILE}" = auto ]; then
 		/usr/sbin/sdcard mount >/dev/null 2>&1 || true
 		FMD_WAIT=0
 		set +e
-		while ! fmd_sdcard_mounted && [ "${FMD_WAIT}" -lt "${FMD_SDCARD_WAIT}" ]; do
+		while ! fmd_mountpoint_mounted /mnt/sdcard &&
+			[ "${FMD_WAIT}" -lt "${FMD_SDCARD_WAIT}" ]; do
 			sleep 1
 			FMD_WAIT=$((FMD_WAIT + 1))
 		done
 		set -e
-		if fmd_sdcard_mounted; then
+		if fmd_mountpoint_mounted /mnt/sdcard; then
 			FMD_STATE_FILE=${FMD_SDCARD_STATE_FILE}
 			FMD_STATE_BACKEND=sdcard
-		else
-			echo "find-my-device: SD card is not mounted; state is temporary" >&2
 		fi
+	fi
+	if [ "${FMD_STATE_BACKEND}" = ram ] && [ -x /usr/sbin/spinand-ubi ]; then
+		# The package's boot helper normally attaches UBI in the background.
+		# If automount was disabled, explicitly try the same non-destructive mount.
+		if [ ! -x /usr/sbin/spinand-ubi-auto ]; then
+			/usr/sbin/spinand-ubi mount >/dev/null 2>&1 || true
+		fi
+		FMD_WAIT=0
+		set +e
+		while ! fmd_mountpoint_mounted /mnt/spinand &&
+			[ "${FMD_WAIT}" -lt "${FMD_SPINAND_WAIT}" ]; do
+			if [ -r /var/run/spinand-ubi.status ]; then
+				read -r FMD_SPINAND_STATUS < /var/run/spinand-ubi.status
+				case "${FMD_SPINAND_STATUS}" in
+					missing|unavailable) break ;;
+				esac
+			fi
+			sleep 1
+			FMD_WAIT=$((FMD_WAIT + 1))
+		done
+		set -e
+		if fmd_mountpoint_mounted /mnt/spinand; then
+			FMD_STATE_FILE=${FMD_SPINAND_STATE_FILE}
+			FMD_STATE_BACKEND=spinand
+		fi
+	fi
+	if [ "${FMD_STATE_BACKEND}" = ram ]; then
+		echo "find-my-device: no persistent storage is mounted; state is temporary" >&2
 	fi
 fi
 

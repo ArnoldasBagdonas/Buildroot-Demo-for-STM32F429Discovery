@@ -1,0 +1,2 @@
+# Installed as a build-time marker when experimental UBI fastmap is selected.
+# spinand-ubi uses it to enable fm_autoconvert before attaching the UBI device.

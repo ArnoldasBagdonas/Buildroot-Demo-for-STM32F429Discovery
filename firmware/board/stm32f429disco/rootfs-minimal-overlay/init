@@ -3,8 +3,10 @@ mount -t devtmpfs devtmpfs /dev
 mount -t sysfs sysfs /sys
 mount -t proc proc /proc 2>/dev/null || true
 export PATH="/bin:/sbin:/usr/bin:/usr/sbin" PS1='# '
-if [ -x /usr/sbin/spinand-ubi ]; then
-	/usr/sbin/spinand-ubi mount || echo "SPI-NAND: not initialized; run 'spinand-ubi format --yes' once"
+if [ -x /usr/sbin/spinand-ubi-auto ]; then
+	# Resolve persistent storage before dependent services start. This makes
+	# Find My Device's backend choice deterministic and avoids an automount race.
+	/usr/sbin/spinand-ubi-auto auto || true
 fi
 if [ -x /usr/sbin/sdcard-auto ]; then
 	/usr/sbin/sdcard-auto &

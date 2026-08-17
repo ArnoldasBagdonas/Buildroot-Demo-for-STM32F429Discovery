@@ -176,19 +176,28 @@ the test computer on the same link-local subnet for a direct cable test.
 
 The root filesystem is an initramfs. With Find My Device alone, renames and
 OAuth refresh state survive a daemon restart during one boot but not a power
-cycle. When standalone `BR2_PACKAGE_SDCARD=y` is also selected, Find My Device
-explicitly requests a card mount during its own startup, waits up to ten
-seconds, and stores state at:
+cycle. With `FMD_STATE_FILE=auto`, startup checks persistent storage at runtime
+in this order:
+
+1. a mounted standalone SD card;
+2. the initialized SPI-NAND UBIFS volume; and
+3. the RAM-backed root filesystem as a safe fallback.
+
+The persistent paths are:
 
 ```text
 /mnt/sdcard/find-my-device/state
+/mnt/spinand/find-my-device/state
 ```
 
-Startup prints the chosen path and `backend=sdcard` or `backend=ram`. If the
-card is missing or cannot be mounted, Find My Device remains usable with
-temporary RAM state. Do not unmount or remove the card while the daemon is
-running. State updates are written through a temporary file, synchronized,
-and renamed into place before success is reported.
+This is a runtime policy rather than a Kconfig dependency: Find My Device stays
+independent of both storage examples and only uses helpers and mounts present
+in the running image. Startup prints the chosen path and `backend=sdcard`,
+`backend=spinand`, or `backend=ram`. If no persistent volume can be mounted,
+Find My Device remains usable with temporary RAM state. Do not unmount the
+selected volume while the daemon is running. State updates are written through
+a temporary file, synchronized, and renamed into place before success is
+reported.
 
 ## Configuration
 
@@ -210,8 +219,7 @@ the same debug option is enabled. All debug-only handlers and periodic reports
 are omitted when the option is disabled.
 
 Edit `find-my-device.conf` in this package and rebuild to change the interface,
-port, initial name/model, state path, SD mount wait, or optional GPIOs. The
-default `FMD_STATE_FILE=auto` selects SD-backed state only when the standalone
-SD helper is installed and `/mnt/sdcard` is mounted. Set an explicit absolute
-path to override that behavior. Files under `/etc` on a running board are
-RAM-backed and reset to the built image on reboot.
+port, initial name/model, state paths, storage waits, or optional GPIOs. The
+default `FMD_STATE_FILE=auto` applies the SD → SPI-NAND → RAM runtime policy.
+Set an explicit absolute path to override that behavior. Files under `/etc` on
+a running board are RAM-backed and reset to the built image on reboot.

@@ -16,6 +16,52 @@ config BR2_PACKAGE_SPINAND
 
 	  See package/spinand/README.md for wiring and first-use instructions.
 
+if BR2_PACKAGE_SPINAND
+
+menu "W25N02KV SPI-NAND options"
+
+config BR2_PACKAGE_SPINAND_COMPRESS_INITRAMFS
+	bool "Compress the initramfs with gzip"
+	default y
+	help
+	  Store the embedded root filesystem as a gzip-compressed archive in
+	  internal flash. Linux expands it into RAM during boot; the kernel
+	  remains an XIP image and continues executing directly from flash.
+
+	  SPI-NAND support adds MTD, UBI, UBIFS, and management utilities, so
+	  compression is enabled by default to help the final xipImage stay
+	  below the STM32F429 project's 2,048,000-byte limit.
+
+config BR2_PACKAGE_SPINAND_AUTOMOUNT
+	bool "Mount an initialized UBIFS volume automatically at boot"
+	default y
+	help
+	  Probe the W25N02KV during boot, attach its UBI partition, and mount
+	  the data volume at /mnt/spinand. Existing data is never erased.
+
+	  When the NAND is detected but has no usable UBI data volume, boot
+	  prints the explicit one-time initialization command:
+	  "spinand-ubi format --yes". Formatting remains a manual destructive
+	  action and is never performed by this option.
+
+config BR2_PACKAGE_SPINAND_FASTMAP
+	bool "Use UBI fastmap checkpoints (experimental)"
+	default n
+	help
+	  Enable Linux CONFIG_MTD_UBI_FASTMAP and request automatic fastmap
+	  creation before UBI is attached. The first attach still performs a
+	  full scan and writes a checkpoint; later attaches can restore the UBI
+	  mapping by reading the fastmap instead of scanning every eraseblock.
+
+	  Linux 6.6 marks the on-flash fastmap format experimental. Fastmap also
+	  reserves eraseblocks for two checkpoint copies. Back up an existing
+	  volume before enabling this option: volumes created with "ubimkvol -m"
+	  may need to be reformatted so those eraseblocks can be reserved.
+
+endmenu
+
+endif
+
 comment "W25N02KV SPI-NAND is unavailable with SD card (storage image size)"
 	depends on BR2_PACKAGE_SDCARD
 

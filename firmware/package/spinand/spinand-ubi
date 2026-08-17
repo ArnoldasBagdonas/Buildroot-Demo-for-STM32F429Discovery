@@ -6,6 +6,10 @@ MTD_NAME=ubi
 UBI_NUM=0
 VOLUME_NAME=data
 MOUNT_POINT=/mnt/spinand
+BOOT_WAIT_SECONDS=${SPINAND_BOOT_WAIT:-2}
+BOOT_STATUS=/var/run/spinand-ubi.status
+FASTMAP_MARKER=/etc/spinand-ubi-fastmap
+FASTMAP_PARAMETER=/sys/module/ubi/parameters/fm_autoconvert
 
 find_mtd_num()
 {
@@ -33,6 +37,17 @@ require_mtd()
 	MTD_DEV=/dev/mtd${MTD_NUM}
 }
 
+wait_for_mtd()
+{
+	waited=0
+	while ! find_mtd_num && [ "$waited" -lt "$BOOT_WAIT_SECONDS" ]; do
+		sleep 1
+		waited=$((waited + 1))
+	done
+	find_mtd_num || return 1
+	MTD_DEV=/dev/mtd${MTD_NUM}
+}
+
 ubi_is_attached()
 {
 	[ -r "/sys/class/ubi/ubi${UBI_NUM}/mtd_num" ] &&
@@ -44,6 +59,16 @@ is_mounted()
 	grep -q " $MOUNT_POINT " /proc/mounts 2>/dev/null
 }
 
+configure_fastmap()
+{
+	[ -e "$FASTMAP_MARKER" ] || return 0
+	if [ ! -w "$FASTMAP_PARAMETER" ]; then
+		echo "UBI fastmap was selected, but fm_autoconvert is unavailable." >&2
+		return 1
+	fi
+	echo 1 > "$FASTMAP_PARAMETER"
+}
+
 attach_ubi()
 {
 	if ubi_is_attached; then
@@ -53,7 +78,15 @@ attach_ubi()
 		echo "ubi${UBI_NUM} is already assigned to another MTD device." >&2
 		return 1
 	fi
+	configure_fastmap || return 1
 	ubiattach -m "$MTD_NUM" -d "$UBI_NUM" /dev/ubi_ctrl
+}
+
+suggest_format()
+{
+	echo "SPI-NAND was detected, but it has no usable UBI '$VOLUME_NAME' volume." >&2
+	echo "Inspect it without changing data: spinand-ubi status" >&2
+	echo "To erase and initialize it once: spinand-ubi format --yes" >&2
 }
 
 show_status()
@@ -74,15 +107,22 @@ show_status()
 	else
 		echo "UBIFS:     not mounted"
 	fi
+	if [ -e "$FASTMAP_MARKER" ]; then
+		echo "Fastmap:   requested (experimental)"
+	else
+		echo "Fastmap:   disabled"
+	fi
 }
 
 mount_volume()
 {
 	require_mtd
-	attach_ubi || return 1
+	if ! attach_ubi; then
+		suggest_format
+		return 1
+	fi
 	if [ ! -e "/sys/class/ubi/ubi${UBI_NUM}_0" ]; then
-		echo "UBI volume '$VOLUME_NAME' does not exist." >&2
-		echo "Initialize it once with: spinand-ubi format --yes" >&2
+		suggest_format
 		return 1
 	fi
 	mkdir -p "$MOUNT_POINT"
@@ -90,6 +130,24 @@ mount_volume()
 		mount -t ubifs "ubi${UBI_NUM}:$VOLUME_NAME" "$MOUNT_POINT"
 	fi
 	echo "UBIFS mounted at $MOUNT_POINT"
+}
+
+auto_mount_volume()
+{
+	mkdir -p /var/run
+	echo checking > "$BOOT_STATUS"
+	if ! wait_for_mtd; then
+		echo "SPI-NAND MTD partition '$MTD_NAME' was not detected during boot." >&2
+		echo "Check the wiring and that the -spinand DTB was flashed." >&2
+		echo missing > "$BOOT_STATUS"
+		return 1
+	fi
+	if mount_volume; then
+		echo mounted > "$BOOT_STATUS"
+		return 0
+	fi
+	echo unavailable > "$BOOT_STATUS"
+	return 1
 }
 
 format_volume()
@@ -109,7 +167,7 @@ format_volume()
 	echo "Erasing $MTD_DEV..."
 	flash_eraseall "$MTD_DEV"
 	echo "Creating UBI device and '$VOLUME_NAME' volume..."
-	ubiattach -m "$MTD_NUM" -d "$UBI_NUM" /dev/ubi_ctrl
+	attach_ubi
 	ubimkvol -N "$VOLUME_NAME" -m "/dev/ubi${UBI_NUM}"
 	mount_volume
 }
@@ -120,6 +178,9 @@ case "${1:-status}" in
 		;;
 	mount)
 		mount_volume
+		;;
+	auto)
+		auto_mount_volume
 		;;
 	format)
 		format_volume "${2:-}"
@@ -133,7 +194,7 @@ case "${1:-status}" in
 		fi
 		;;
 	*)
-		echo "Usage: spinand-ubi {status|mount|format --yes|unmount}" >&2
+		echo "Usage: spinand-ubi {status|mount|auto|format --yes|unmount}" >&2
 		exit 2
 		;;
 esac

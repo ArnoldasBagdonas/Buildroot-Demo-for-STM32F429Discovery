@@ -114,7 +114,11 @@ the original removable-card behavior.
 
 Find My Device and standalone SD card remain independent selectable packages.
 When both are selected, SD remains alone on SPI4 while W5500 uses shared SPI5,
-and Find My Device automatically stores state under `/mnt/sdcard`.
+and Find My Device automatically stores state under `/mnt/sdcard`. When
+SPI-NAND is selected instead, its options independently control initramfs gzip
+compression, boot-blocking UBIFS automount, and an experimental default-off UBI
+fastmap checkpoint. Find My Device chooses storage at runtime in SD → SPI-NAND
+→ RAM order without selecting either storage package.
 
 Optional: confirm the selection before building:
 

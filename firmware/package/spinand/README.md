@@ -7,14 +7,18 @@ builds a `-spinand.dtb` that `make flash` selects automatically.
 
 The package never formats the NAND automatically. Formatting is an explicit
 one-time operation, because it destroys everything in the 32 MiB partition.
-After initialization, the image automatically attaches and mounts the `data`
-volume at `/mnt/spinand` on every boot.
+Its options menu controls gzip initramfs compression and automatic mounting.
+Both default to enabled. After initialization, the boot helper attaches and
+mounts the `data` volume at `/mnt/spinand` before dependent services start. If
+the chip is detected but is not initialized, the console suggests the guarded
+format command without erasing anything automatically.
 
 The standalone SPI-NAND image removes the unused network stack to conserve the
 STM32F429's 2 MiB internal XIP flash. When Find My Device is also selected, its
 IPv4/W5500 fragment is reapplied and the combined `-w5500-spinand.dtb` is
-built. Enable Find My Device's gzip-initramfs option for that size-heavy
-composition, and still verify the final image against the size check below.
+built. The SPI-NAND gzip-initramfs option is enabled by default for that
+size-heavy composition; still verify the final image against the size check
+below.
 Standalone SD card and Gallery's built-in SD support remain excluded by
 Kconfig for image size, not wiring. Display, embedded-image Gallery, and USB
 serial have no pin conflict with this wiring, but every resulting image must
@@ -109,6 +113,10 @@ location, and enable:
 
 ```text
 W25N02KV SPI-NAND: 32 MiB UBIFS data volume
+    W25N02KV SPI-NAND options
+        [*] Compress the initramfs with gzip
+        [*] Mount an initialized UBIFS volume automatically at boot
+        [ ] Use UBI fastmap checkpoints (experimental)
 ```
 
 Save and exit, then confirm the temporary selection:
@@ -177,6 +185,41 @@ The exact MTD number is discovered by name and may vary. A missing `ubi` MTD
 partition normally means that the wrong DTB was flashed or SPI wiring is
 incorrect. Recheck `CS#`, swapped `DI`/`DO`, the two pull-ups, ground, and 3.3 V.
 
+With automount enabled, the same check is a boot prerequisite. An unformatted
+device produces this actionable suggestion, and boot then continues without
+erasing it:
+
+```text
+SPI-NAND was detected, but it has no usable UBI 'data' volume.
+Inspect it without changing data: spinand-ubi status
+To erase and initialize it once: spinand-ubi format --yes
+```
+
+## Boot-time performance
+
+UBI attach scans eraseblock metadata and UBIFS then replays only the journal
+work needed for a consistent mount. This example limits UBI to 32 MiB, or 256
+128-KiB eraseblocks, rather than scanning the complete 256 MiB chip. Boot waits
+for the attach and mount attempt to finish before starting dependent services,
+so Find My Device always sees the final storage state. A missing MTD device adds
+at most the two-second detection timeout; mounting an initialized volume also
+includes UBI scan and UBIFS journal-replay time.
+
+The default-off `Use UBI fastmap checkpoints (experimental)` option enables
+`CONFIG_MTD_UBI_FASTMAP` and requests `fm_autoconvert` before `ubiattach`.
+The first attach still performs a full scan and creates a checkpoint. Later
+attaches search the first 64 eraseblocks for the fastmap anchor instead of
+scanning metadata from all 256 eraseblocks. This improves only UBI attach;
+initramfs decompression and UBIFS journal replay are unchanged.
+
+Linux 6.6 labels the fastmap on-flash format experimental. It reserves space
+for two checkpoint copies and adds occasional checkpoint updates. Back up data
+before enabling it on an existing volume. This package normally creates the
+`data` volume with `ubimkvol -m`, so an old maximum-size volume may not leave
+enough free eraseblocks for conversion. If conversion cannot reserve them,
+restore the previous configuration to recover the data, back it up, then
+enable fastmap and use the guarded format command before restoring the files.
+
 ## One-time destructive initialization
 
 Only after `spinand-ubi status` reports the expected 32 MiB device, erase and
@@ -208,7 +251,7 @@ cat /mnt/spinand/test.txt
 ```
 
 Reset or power-cycle the board. The image automatically runs
-`spinand-ubi mount` during boot. Confirm that the file survived:
+`spinand-ubi auto` during boot. Confirm that the file survived:
 
 ```sh
 spinand-ubi status
@@ -220,6 +263,7 @@ Manual management commands are:
 ```sh
 spinand-ubi status
 spinand-ubi mount
+spinand-ubi auto
 spinand-ubi unmount
 ```
 
@@ -234,6 +278,9 @@ do not reformat merely because power was removed without an unmount.
   partition.
 - `firmware/board/stm32f429disco/linux-spinand.config` enables MTD, SPI-NAND,
   UBI, and UBIFS only while this package is selected.
+- `firmware/board/stm32f429disco/linux-spinand-fastmap.config` enables the
+  experimental kernel fastmap implementation only when its menu option is
+  selected.
 - `firmware/board/stm32f429disco/busybox-spinand.config` enables the compact
   erase and UBI management applets.
 - `spinand-ubi` provides guarded initialization and normal mount/status
