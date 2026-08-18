@@ -17,7 +17,21 @@ FIND_MY_DEVICE_STATE_SOURCES =
 
 ifeq ($(BR2_PACKAGE_FIND_MY_DEVICE_FRAM),y)
 FIND_MY_DEVICE_CPPFLAGS += -DFMD_FRAM_STATE
-FIND_MY_DEVICE_STATE_SOURCES += fram_state.c
+endif
+
+ifeq ($(BR2_PACKAGE_FIND_MY_DEVICE_EEPROM),y)
+FIND_MY_DEVICE_CPPFLAGS += -DFMD_EEPROM_STATE
+LINUX_KCONFIG_FRAGMENT_FILES += \
+	$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/linux-find-my-device-eeprom.config
+
+define FIND_MY_DEVICE_INSTALL_EEPROM_MARKER
+	$(INSTALL) -D -m 0644 /dev/null \
+		$(TARGET_DIR)/etc/find-my-device-eeprom
+endef
+endif
+
+ifneq ($(filter y,$(BR2_PACKAGE_FIND_MY_DEVICE_FRAM) $(BR2_PACKAGE_FIND_MY_DEVICE_EEPROM)),)
+FIND_MY_DEVICE_STATE_SOURCES += nvmem_state.c
 endif
 
 ifeq ($(BR2_PACKAGE_FIND_MY_DEVICE_SPINOR_STATE),y)
@@ -39,6 +53,10 @@ define FIND_MY_DEVICE_INSTALL_SPINOR_STATE_MARKER
 	$(INSTALL) -D -m 0644 /dev/null \
 		$(TARGET_DIR)/etc/find-my-device-spinor-state
 endef
+endif
+
+ifneq ($(filter y,$(BR2_PACKAGE_FIND_MY_DEVICE_FRAM) $(BR2_PACKAGE_FIND_MY_DEVICE_EEPROM) $(BR2_PACKAGE_FIND_MY_DEVICE_SPINOR_STATE)),)
+FIND_MY_DEVICE_STATE_SOURCES += state_record.c
 endif
 
 ifeq ($(BR2_PACKAGE_FIND_MY_DEVICE_CONSOLE_DEBUG),y)
@@ -66,14 +84,24 @@ endif
 ifeq ($(BR2_PACKAGE_FIND_MY_DEVICE_FRAM),y)
 LINUX_KCONFIG_FRAGMENT_FILES += \
 	$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/linux-find-my-device-fram.config
+ifeq ($(BR2_PACKAGE_FIND_MY_DEVICE_EEPROM),y)
+FIND_MY_DEVICE_COMPOSITION_DTSI = stm32f429disco-find-my-device-fram-eeprom.dtsi
+else
 FIND_MY_DEVICE_COMPOSITION_DTSI = stm32f429disco-find-my-device-fram.dtsi
+endif
 
 define FIND_MY_DEVICE_INSTALL_FRAM_MARKER
 	$(INSTALL) -D -m 0644 /dev/null \
 		$(TARGET_DIR)/etc/find-my-device-fram
 endef
 else ifneq ($(filter y,$(BR2_PACKAGE_FIND_MY_DEVICE_SPINOR_STATE) $(BR2_PACKAGE_SPINOR)),)
+ifeq ($(BR2_PACKAGE_FIND_MY_DEVICE_EEPROM),y)
+FIND_MY_DEVICE_COMPOSITION_DTSI = stm32f429disco-find-my-device-spinor-eeprom.dtsi
+else
 FIND_MY_DEVICE_COMPOSITION_DTSI = stm32f429disco-find-my-device-spinor.dtsi
+endif
+else ifeq ($(BR2_PACKAGE_FIND_MY_DEVICE_EEPROM),y)
+FIND_MY_DEVICE_COMPOSITION_DTSI = stm32f429disco-find-my-device-eeprom.dtsi
 else
 FIND_MY_DEVICE_COMPOSITION_DTSI = stm32f429disco-find-my-device.dtsi
 endif
@@ -109,6 +137,9 @@ define FIND_MY_DEVICE_COPY_DTS
 		$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/dts/stm32f429disco-find-my-device.dtsi \
 		$(LINUX_ARCH_PATH)/boot/dts/stm32f429disco-find-my-device.dtsi
 	$(INSTALL) -D -m 0644 \
+		$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/dts/stm32f429disco-find-my-device-eeprom-device.dtsi \
+		$(LINUX_ARCH_PATH)/boot/dts/stm32f429disco-find-my-device-eeprom-device.dtsi
+	$(INSTALL) -D -m 0644 \
 		$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/dts/$(FIND_MY_DEVICE_COMPOSITION_DTSI) \
 		$(LINUX_ARCH_PATH)/boot/dts/stm32f429disco-find-my-device-config.dtsi
 	$(INSTALL) -D -m 0644 \
@@ -137,9 +168,11 @@ define FIND_MY_DEVICE_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0644 $(@D)/find-my-device.conf \
 		$(TARGET_DIR)/etc/find-my-device.conf
 	rm -f $(TARGET_DIR)/etc/find-my-device-fram \
+		$(TARGET_DIR)/etc/find-my-device-eeprom \
 		$(TARGET_DIR)/etc/find-my-device-spinor \
 		$(TARGET_DIR)/etc/find-my-device-spinor-state
 	$(FIND_MY_DEVICE_INSTALL_FRAM_MARKER)
+	$(FIND_MY_DEVICE_INSTALL_EEPROM_MARKER)
 	$(FIND_MY_DEVICE_INSTALL_SPINOR_STATE_MARKER)
 	$(INSTALL) -D -m 0755 $(@D)/udhcpc.script \
 		$(TARGET_DIR)/usr/share/find-my-device/udhcpc.script

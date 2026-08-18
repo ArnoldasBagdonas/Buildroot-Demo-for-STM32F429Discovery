@@ -1,0 +1,3 @@
+/* Compose Find My Device with SPI-FRAM and independent I2C EEPROM NVMEM. */
+#include "stm32f429disco-find-my-device-fram.dtsi"
+#include "stm32f429disco-find-my-device-eeprom-device.dtsi"

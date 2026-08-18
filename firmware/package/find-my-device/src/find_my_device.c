@@ -1,8 +1,8 @@
 #define _GNU_SOURCE
 
 #include "device_info.h"
-#ifdef FMD_FRAM_STATE
-#include "fram_state.h"
+#if defined(FMD_FRAM_STATE) || defined(FMD_EEPROM_STATE)
+#include "nvmem_state.h"
 #endif
 #ifdef FMD_SPINOR_STATE
 #include "spinor_state.h"
@@ -71,8 +71,8 @@ typedef struct
     bool button_active_low;
     bool gpio_enabled;
     bool prepare_interface;
-#ifdef FMD_FRAM_STATE
-    bool state_is_fram;
+#if defined(FMD_FRAM_STATE) || defined(FMD_EEPROM_STATE)
+    bool state_is_nvmem;
 #endif
 #ifdef FMD_SPINOR_STATE
     bool state_is_spinor;
@@ -90,9 +90,9 @@ typedef struct
     OAuthPersistentState oauth;
 } PersistentState;
 
-#ifdef FMD_FRAM_STATE
-_Static_assert(sizeof(PersistentState) <= FRAM_STATE_MAX_PAYLOAD,
-               "Find My Device state does not fit one FRAM record");
+#if defined(FMD_FRAM_STATE) || defined(FMD_EEPROM_STATE)
+_Static_assert(sizeof(PersistentState) <= NVMEM_STATE_MAX_PAYLOAD,
+               "Find My Device state does not fit one NVMEM record");
 #endif
 #ifdef FMD_SPINOR_STATE
 _Static_assert(sizeof(PersistentState) <= SPINOR_STATE_MAX_PAYLOAD,
@@ -246,6 +246,9 @@ static void usage(const char *program)
 #ifdef FMD_FRAM_STATE
             "  --state-fram           PATH is a raw FRAM NVMEM device\n"
 #endif
+#ifdef FMD_EEPROM_STATE
+            "  --state-eeprom         PATH is a raw I2C EEPROM NVMEM device\n"
+#endif
 #ifdef FMD_SPINOR_STATE
             "  --state-spinor         PATH is a raw SPI-NOR MTD partition\n"
 #endif
@@ -290,7 +293,11 @@ static bool parse_options(int argc, char **argv, Options *options, const char **
             options->prepare_interface = true;
 #ifdef FMD_FRAM_STATE
         else if (strcmp(option, "--state-fram") == 0)
-            options->state_is_fram = true;
+            options->state_is_nvmem = true;
+#endif
+#ifdef FMD_EEPROM_STATE
+        else if (strcmp(option, "--state-eeprom") == 0)
+            options->state_is_nvmem = true;
 #endif
 #ifdef FMD_SPINOR_STATE
         else if (strcmp(option, "--state-spinor") == 0)
@@ -568,10 +575,10 @@ static bool save_persistent_state(Application *application)
     application->persistent.size = (uint16_t)sizeof(application->persistent);
     snprintf(application->persistent.device_name, sizeof(application->persistent.device_name), "%s",
              application->device_name);
-#ifdef FMD_FRAM_STATE
-    if (application->options.state_is_fram)
-        return fram_state_save(application->options.state_path, &application->persistent,
-                               sizeof(application->persistent));
+#if defined(FMD_FRAM_STATE) || defined(FMD_EEPROM_STATE)
+    if (application->options.state_is_nvmem)
+        return nvmem_state_save(application->options.state_path, &application->persistent,
+                                sizeof(application->persistent));
 #endif
 #ifdef FMD_SPINOR_STATE
     if (application->options.state_is_spinor)
@@ -608,10 +615,10 @@ static void load_persistent_state(Application *application, const char *initial_
     memset(&application->persistent, 0, sizeof(application->persistent));
     memset(&state, 0, sizeof(state));
     snprintf(application->device_name, sizeof(application->device_name), "%s", initial_name);
-#ifdef FMD_FRAM_STATE
-    if (application->options.state_is_fram)
+#if defined(FMD_FRAM_STATE) || defined(FMD_EEPROM_STATE)
+    if (application->options.state_is_nvmem)
     {
-        loaded = fram_state_load(application->options.state_path, &state, sizeof(state));
+        loaded = nvmem_state_load(application->options.state_path, &state, sizeof(state));
     }
     else
 #endif

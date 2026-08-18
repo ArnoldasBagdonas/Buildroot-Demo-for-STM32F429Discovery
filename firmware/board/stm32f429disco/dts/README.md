@@ -201,6 +201,12 @@ FRAM-enabled composition as `stm32f429disco-find-my-device-config.dtsi` before
 the selected DTB is compiled. This keeps the minimal, Display, USB, SD, and
 SPI-NAND compositions consistent without a matrix of extra filename suffixes.
 
+Selecting `BR2_PACKAGE_FIND_MY_DEVICE_EEPROM` adds a Microchip 24LC16B to the
+existing 100 kHz I2C3 bus on PA8/PC9. The `at24` driver exposes its 2 KiB
+capacity through NVMEM; Find My Device uses two alternating records in the
+first 512 bytes without a filesystem. EEPROM composes independently with the
+base, FRAM, or SPI-NOR Find My Device device tree.
+
 Selecting `BR2_PACKAGE_SPINOR` similarly composes a W25Q128FV on SPI5 chip
 select 4 (PG2). Its first two 4 KiB erase sectors are always the raw
 `find-my-device-state` partition and the remaining 16,376 KiB is the

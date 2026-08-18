@@ -13,6 +13,8 @@ FMD_DEVICE_MODEL=${FMD_DEVICE_MODEL:-FINDER-R01}
 FMD_STATE_FILE=${FMD_STATE_FILE:-auto}
 FMD_FRAM_STATE_DEVICE=${FMD_FRAM_STATE_DEVICE:-auto}
 FMD_FRAM_WAIT=${FMD_FRAM_WAIT:-3}
+FMD_EEPROM_STATE_DEVICE=${FMD_EEPROM_STATE_DEVICE:-auto}
+FMD_EEPROM_WAIT=${FMD_EEPROM_WAIT:-3}
 FMD_SPINOR_RAW_DEVICE=${FMD_SPINOR_RAW_DEVICE:-auto}
 FMD_SPINOR_RAW_WAIT=${FMD_SPINOR_RAW_WAIT:-3}
 FMD_SDCARD_STATE_FILE=${FMD_SDCARD_STATE_FILE:-/mnt/sdcard/find-my-device/state}
@@ -52,6 +54,26 @@ fmd_find_fram()
 	for FMD_FRAM_CANDIDATE in /sys/bus/spi/devices/*/fram; do
 		if [ -r "${FMD_FRAM_CANDIDATE}" ] && [ -w "${FMD_FRAM_CANDIDATE}" ]; then
 			FMD_FRAM_DEVICE=${FMD_FRAM_CANDIDATE}
+			return 0
+		fi
+	done
+	return 1
+}
+
+fmd_find_eeprom()
+{
+	if [ "${FMD_EEPROM_STATE_DEVICE}" != auto ]; then
+		if [ -r "${FMD_EEPROM_STATE_DEVICE}" ] && [ -w "${FMD_EEPROM_STATE_DEVICE}" ]; then
+			FMD_EEPROM_DEVICE=${FMD_EEPROM_STATE_DEVICE}
+			return 0
+		fi
+		return 1
+	fi
+	for FMD_EEPROM_CANDIDATE in \
+		/sys/bus/nvmem/devices/find-my-device-eeprom*/nvmem \
+		/sys/bus/i2c/devices/*-0050/eeprom; do
+		if [ -r "${FMD_EEPROM_CANDIDATE}" ] && [ -w "${FMD_EEPROM_CANDIDATE}" ]; then
+			FMD_EEPROM_DEVICE=${FMD_EEPROM_CANDIDATE}
 			return 0
 		fi
 	done
@@ -98,7 +120,23 @@ if [ "${FMD_STATE_FILE}" = auto ]; then
 			FMD_STATE_BACKEND=fram
 			FMD_STATE_MODE_ARGS=--state-fram
 		else
-			echo "find-my-device: CY15B256Q FRAM is not available; trying mounted storage" >&2
+			echo "find-my-device: CY15B256Q FRAM is not available; trying other storage" >&2
+		fi
+	fi
+	if [ "${FMD_STATE_BACKEND}" = ram ] && [ -e /etc/find-my-device-eeprom ]; then
+		FMD_WAIT=0
+		set +e
+		while ! fmd_find_eeprom && [ "${FMD_WAIT}" -lt "${FMD_EEPROM_WAIT}" ]; do
+			sleep 1
+			FMD_WAIT=$((FMD_WAIT + 1))
+		done
+		set -e
+		if fmd_find_eeprom; then
+			FMD_STATE_FILE=${FMD_EEPROM_DEVICE}
+			FMD_STATE_BACKEND=eeprom
+			FMD_STATE_MODE_ARGS=--state-eeprom
+		else
+			echo "find-my-device: 24LC16B EEPROM is not available; trying other storage" >&2
 		fi
 	fi
 	if [ "${FMD_STATE_BACKEND}" = ram ] && [ -e /etc/find-my-device-spinor-state ]; then
@@ -160,7 +198,7 @@ if [ "${FMD_STATE_FILE}" = auto ]; then
 		fi
 	fi
 	if [ "${FMD_STATE_BACKEND}" = ram ] && [ -x /usr/sbin/spinand-ubi ]; then
-		# The package's boot helper normally mounts JFFS2 before this service.
+		# The package's boot helper normally mounts UBIFS before this service.
 		# If automount was disabled, explicitly try the same non-destructive mount.
 		if [ ! -x /usr/sbin/spinand-ubi-auto ]; then
 			/usr/sbin/spinand-ubi mount >/dev/null 2>&1 || true
@@ -190,7 +228,7 @@ if [ "${FMD_STATE_FILE}" = auto ]; then
 fi
 
 case "${FMD_STATE_BACKEND}" in
-	fram|spinor-raw) ;;
+	fram|eeprom|spinor-raw) ;;
 	*)
 		FMD_STATE_DIRECTORY=${FMD_STATE_FILE%/*}
 		if [ -z "${FMD_STATE_DIRECTORY}" ] || [ "${FMD_STATE_DIRECTORY}" = "${FMD_STATE_FILE}" ]; then

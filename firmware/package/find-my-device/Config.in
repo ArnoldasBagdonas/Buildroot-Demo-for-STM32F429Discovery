@@ -11,10 +11,11 @@ config BR2_PACKAGE_FIND_MY_DEVICE
 	  the STM32 factory unique ID. Optional external confirmation-button
 	  and status-LED GPIOs avoid every pin used by the existing examples.
 
-	  Persistent state can use optional filesystem-free CY15B256Q FRAM or
-	  W25Q128FV SPI-NOR storage, or a mounted standalone storage package.
-	  Runtime detection selects the first available backend and falls back
-	  safely to the RAM-backed root filesystem.
+	  Persistent state can use optional filesystem-free CY15B256Q FRAM,
+	  24LC16B I2C EEPROM, or W25Q128FV SPI-NOR storage, or a mounted
+	  standalone storage package. Runtime detection selects the first
+	  available backend and falls back safely to the RAM-backed root
+	  filesystem.
 
 if BR2_PACKAGE_FIND_MY_DEVICE
 
@@ -34,6 +35,18 @@ config BR2_PACKAGE_FIND_MY_DEVICE_FRAM
 config BR2_PACKAGE_FIND_MY_DEVICE_FRAM_SELECTED
 	bool
 	default y if BR2_PACKAGE_FIND_MY_DEVICE_FRAM
+
+config BR2_PACKAGE_FIND_MY_DEVICE_EEPROM
+	bool "Enable 24LC16B I2C EEPROM"
+	help
+	  Enable a Microchip 24LC16B on the existing 100 kHz I2C3 bus. Linux's
+	  at24 driver exposes its 2 KiB as byte-addressable NVMEM; no filesystem
+	  is used. Find My Device stores two alternating 256-byte records with
+	  generation counters, CRC32, and read-back verification.
+
+	  The EEPROM occupies I2C addresses 0x50 through 0x57. It can coexist
+	  with SPI-FRAM, SPI-NOR, and mounted storage, and Find My Device remains
+	  the sole writer of its reserved first 512 bytes.
 
 config BR2_PACKAGE_FIND_MY_DEVICE_SPINOR_STATE
 	bool "Enable W25Q128FV SPI-NOR"

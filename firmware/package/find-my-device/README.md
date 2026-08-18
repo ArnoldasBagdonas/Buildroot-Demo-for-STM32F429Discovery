@@ -12,6 +12,7 @@ FreeRTOS `find-my-device` project next to this repository. It provides:
   confirmation, refresh-token rotation, renaming, mobile registration, and
   authenticated WebSocket status events;
 - optional power-loss-safe state storage in CY15B256Q SPI FRAM;
+- optional power-loss-safe state storage in 24LC16B I2C EEPROM;
 - optional alternating raw-MTD records on the W25Q128FV SPI-NOR;
 - runtime use of mounted SD, SPI-NOR/JFFS2, and SPI-NAND/UBIFS storage;
 - on-board USER-button confirmation and green status-LED controls.
@@ -24,16 +25,14 @@ onboard 3.3 V regulator may instead require 5 V on its separately labelled
 `5V` or `VIN` input; follow that module's schematic and never apply 5 V to a
 signal pin.
 
-| W5500 label | STM32 signal | Discovery connector |
-|---|---|---|
-| `SCLK` / `SCK` | PF7 / SPI5_SCK | P2 pin 6 |
-| `MISO` | PF8 / SPI5_MISO | P2 pin 5 |
-| `MOSI` | PF9 / SPI5_MOSI | P2 pin 8 |
-| `SCS` / `CS` / `nSS` | PD5, active low | P2 pin 37 |
-| `INT` / `nINT` | PE3, active low | P1 pin 16 |
-| `RST` / `nRST` | board NRST | P2 pin 12 |
-| `3V3` / `VCC` | 3 V rail | P2 pin 1 or pin 2 |
-| `GND` | ground | P2 pin 11 or pin 29 |
+| W5500 label    | STM32 signal    |
+|----------------|-----------------|
+| `SCLK` / `SCK` | PF7 / SPI5_SCK  |
+| `MISO`         | PF8 / SPI5_MISO |
+| `MOSI`         | PF9 / SPI5_MOSI |
+| `SCS` / `CS`   | PD5, active low |
+| `INT`          | PE3, active low |
+| `RST`          | board NRST      |
 
 `RST` is recommended: it resets the W5500 whenever the target MCU resets. If
 the module already has a reliable reset pull-up, it can be left disconnected;
@@ -50,16 +49,16 @@ Select **Find My Device options → Enable CY15B256Q SPI-FRAM** to add the Linux
 AT25/NVMEM driver and the SPI5 FRAM node. Power the board off before connecting
 or disconnecting the device. CY15B256Q signals are 3.3 V only.
 
-| CY15B256Q label | STM32 signal | Discovery connector |
-|---|---|---|
-| `SCK` | PF7 / SPI5_SCK | P2 pin 6 |
-| `SO` / `MISO` | PF8 / SPI5_MISO | P2 pin 5 |
-| `SI` / `MOSI` | PF9 / SPI5_MOSI | P2 pin 8 |
-| `CS#` | PG2, active low | P2 pin 62 |
-| `WP#` | pull up to 3.3 V | — |
-| `HOLD#` | pull up to 3.3 V | — |
-| `VDD` | 3.3 V | P2 pin 1 or pin 2 |
-| `VSS` / `GND` | ground | P2 pin 11 or pin 29 |
+| CY15B256Q label | SOIC8 pin | STM32 signal     |
+|-----------------|-----------|------------------|
+| `SCK`           | 6         | PF7 / SPI5_SCK   |
+| `SO` / `MISO`   | 2         | PF8 / SPI5_MISO  |
+| `SI` / `MOSI`   | 5         | PF9 / SPI5_MOSI  |
+| `CS#`           | 1         | PG2, active low  |
+| `WP#`           | 3         | pull up to 3.3 V |
+| `HOLD#`         | 7         | pull up to 3.3 V |
+| `VDD`           | 8         | 3.3 V            |
+| `VSS` / `GND`   | 4         | ground           |
 
 Add approximately 10 kΩ pull-ups from `CS#`, `WP#`, and `HOLD#` to 3.3 V so
 the device remains deselected and writable while MCU pins are being configured.
@@ -74,6 +73,38 @@ standalone SPI-NOR package. If that package is also selected, the rest of the
 chip becomes the JFFS2 volume documented in
 [`package/spinor/README.md`](../spinor/README.md). CY15B256Q and W25Q128FV
 cannot be selected or wired simultaneously because they share PG2/CS4.
+
+## Optional 24LC16B EEPROM wiring
+
+Select **Find My Device options → Enable 24LC16B I2C EEPROM** to add the
+Linux `at24`/NVMEM driver and a 2 KiB EEPROM on the existing 100 kHz I2C3 bus.
+Power the Discovery board off before connecting or disconnecting it. Use the
+3.3 V `24LC16B` variant; do not apply 5 V to its supply or signal pins when it
+is connected directly to the STM32.
+
+| 24LC16B label    | SOIC8 pin | STM32 signal        | Discovery connector |
+|------------------|-----------|---------------------|---------------------|
+| `SCL`            | 6         | PA8 / I2C3_SCL      | P1 pin 53           |
+| `SDA`            | 5         | PC9 / I2C3_SDA      | P1 pin 54           |
+| `WP`             | 7         | ground for write access | P2 pin 11 or pin 29 |
+| `A0`, `A1`, `A2` | 1, 2, 3   | not used by 24LC16B | leave open or tie to a known level |
+| `VCC`            | 8         | 3.3 V               | P2 pin 1 or pin 2   |
+| `VSS` / `GND`    | 4         | ground              | P2 pin 11 or pin 29 |
+
+SDA and SCL are open-drain signals and require pull-ups to 3.3 V. For the
+configured 100 kHz bus, 10 kΩ is a typical starting value. Many EEPROM
+modules already contain pull-ups; check the module schematic before adding
+another pair because parallel pull-ups may become too strong. Place a 100 nF
+ceramic decoupling capacitor close to a bare IC's VCC/VSS pins.
+
+Unlike many I2C EEPROMs, the 24LC16B uses the address bits to select internal
+memory blocks. One device therefore occupies the complete `0x50` through
+`0x57` address range regardless of how A0/A1/A2 are wired. Do not attach
+another device using any of those addresses. The [Microchip 24LC16B data
+sheet](https://www.microchip.com/content/dam/mchp/documents/OTH/ProductDocuments/DataSheets/20002213B.pdf)
+documents the addressing, 16-byte write pages, write-protect pin, and pull-up
+requirements. Connector locations are documented in the [STM32F429I-DISC1
+board manual](https://www.st.com/resource/en/user_manual/um1670-discovery-kit-with-stm32f429zi-mcu-stmicroelectronics.pdf).
 
 ## Hardware compatibility
 
@@ -104,9 +135,14 @@ their current peripherals:
 | USB USER CDC | PB12/PB14/PB15, OTG HS embedded FS PHY |
 | Console | USART1 PA9/PA10 |
 | UART examples | UART5 PC12/PD2 and RS-485 DE PD4 |
-| I2C example | I2C3 PA8/PC9 |
+| I2C example and optional 24LC16B | I2C3 PA8/PC9 shared; EEPROM owns addresses 0x50–0x57 |
 | PWM example | PB4 |
 | GPIO examples | PG14 (PA0 and PG13 are reserved by this example) |
+
+The EEPROM has no SPI or GPIO conflict and can coexist with FRAM, SPI-NOR,
+SPI-NAND, SD card, Display, and W5500. It shares I2C3 with the bus-scanner
+example; the kernel `at24` driver claims `0x50`–`0x57`, so a scanner may report
+those addresses as busy rather than opening them directly.
 
 The UART examples can run alongside both the display and W5500. Four W5500
 DTBs cover the minimal, display, USB, and USB+display selections. Four matching
@@ -215,16 +251,18 @@ cycle. With `FMD_STATE_FILE=auto`, startup checks persistent storage at runtime
 in this order:
 
 1. CY15B256Q FRAM, when its Find My Device option is enabled and it probes;
-2. the W25Q128FV raw state partition, when its option is enabled;
-3. a mounted standalone SD card;
-4. the mounted SPI-NOR JFFS2 volume;
-5. the initialized SPI-NAND UBIFS volume; and
-6. the RAM-backed root filesystem as a safe fallback.
+2. 24LC16B EEPROM, when its Find My Device option is enabled and it probes;
+3. the W25Q128FV raw state partition, when its option is enabled;
+4. a mounted standalone SD card;
+5. the mounted SPI-NOR JFFS2 volume;
+6. the initialized SPI-NAND UBIFS volume; and
+7. the RAM-backed root filesystem as a safe fallback.
 
 The persistent paths are:
 
 ```text
 /sys/bus/spi/devices/<SPI5-device>/fram
+/sys/bus/nvmem/devices/find-my-device-eeprom*/nvmem
 /dev/mtdX                         (label: find-my-device-state)
 /mnt/sdcard/find-my-device/state
 /mnt/spinor/find-my-device/state
@@ -234,17 +272,19 @@ The persistent paths are:
 This is a runtime policy rather than a Kconfig dependency: Find My Device stays
 independent of the storage examples and only uses helpers and mounts present
 in the running image. Startup prints the chosen path and `backend=fram`,
-`backend=spinor-raw`, `backend=sdcard`, `backend=spinor`, `backend=spinand`,
-or `backend=ram`. If no persistent device
+`backend=eeprom`, `backend=spinor-raw`, `backend=sdcard`, `backend=spinor`,
+`backend=spinand`, or `backend=ram`. If no persistent device
 or volume is available, Find My Device remains usable with temporary RAM state.
 Do not unmount the selected filesystem volume while the daemon is running.
 
-FRAM is raw NVMEM rather than a mounted filesystem. Find My Device reserves its
-first 512 bytes as two alternating 256-byte records. Each record contains a
-generation counter and CRC32; a new record is read back and verified before it
-is accepted, while the previous record remains available after an interrupted
-write. Filesystem state updates continue to use a temporary file, `fsync`, and
-atomic rename.
+FRAM and EEPROM are raw byte-addressable NVMEM rather than mounted filesystems.
+Find My Device reserves the first 512 bytes of either device as two alternating
+256-byte records. Each record contains a format version, generation counter,
+and CRC32; a new record is read back and verified before it is accepted, while
+the previous record remains available after an interrupted write. A shared
+record codec implements this policy for FRAM, EEPROM, and raw SPI-NOR, while
+the device-specific code handles byte writes or NOR erase sectors. Filesystem
+state updates continue to use a temporary file, `fsync`, and atomic rename.
 
 Raw SPI-NOR state uses the same record format but places each record in a
 different 4 KiB erase sector. Before writing the inactive record, the daemon
@@ -255,13 +295,14 @@ erase or program operation. The adjacent JFFS2 partition is independent.
 ## Configuration
 
 The **Find My Device options** menu directly contains **Enable CY15B256Q
-SPI-FRAM**, **Enable W25Q128FV SPI-NOR**, and **Enable console button and LED
-debug controls**. Both storage options operate without a filesystem and are
-disabled by default. They are mutually exclusive because both use PG2;
-selecting SPI-FRAM also disables the standalone SPI-NOR package. The W25Q
-option is available without the standalone SPI-NOR/JFFS2 package. The console
-option adds test controls and diagnostic messages. When console controls are
-selected, use:
+SPI-FRAM**, **Enable 24LC16B I2C EEPROM**, **Enable W25Q128FV SPI-NOR**, and
+**Enable console button and LED debug controls**. All three storage options
+operate without a filesystem and are disabled by default. EEPROM is
+independent and can coexist with either SPI choice. FRAM and SPI-NOR are
+mutually exclusive because both use PG2; selecting SPI-FRAM also disables the
+standalone SPI-NOR package. The W25Q option is available without the standalone
+SPI-NOR/JFFS2 package. The console option adds test controls and diagnostic
+messages. When console controls are selected, use:
 
 ```sh
 find-my-device-debug button  # simulate one complete USER-button tap
@@ -278,10 +319,12 @@ are omitted when the option is disabled.
 
 Edit `find-my-device.conf` in this package and rebuild to change the interface,
 port, initial name/model, state paths, storage waits, or optional GPIOs. The
-default `FMD_STATE_FILE=auto` applies the FRAM → raw SPI-NOR → SD → SPI-NOR
-JFFS2 → SPI-NAND → RAM runtime policy. `FMD_FRAM_STATE_DEVICE=auto` discovers
-the SPI driver's `fram` sysfs file; set it explicitly only if the system has
-more than one SPI FRAM. Set an explicit `FMD_SPINOR_RAW_DEVICE` only when
-automatic discovery by MTD partition label is unsuitable. Set an explicit
-absolute state path to override automatic selection. Files under `/etc` on a
-running board are RAM-backed and reset to the built image on reboot.
+default `FMD_STATE_FILE=auto` applies the FRAM → EEPROM → raw SPI-NOR → SD
+→ SPI-NOR/JFFS2 → SPI-NAND/UBIFS → RAM runtime policy.
+`FMD_FRAM_STATE_DEVICE=auto` discovers the SPI driver's `fram` sysfs file, and
+`FMD_EEPROM_STATE_DEVICE=auto` discovers the labelled NVMEM device. Set either
+explicitly only if the system has multiple matching devices. Set an explicit
+`FMD_SPINOR_RAW_DEVICE` only when automatic discovery by MTD partition label is
+unsuitable. Set an explicit absolute state path to override automatic
+selection. Files under `/etc` on a running board are RAM-backed and reset to
+the built image on reboot.

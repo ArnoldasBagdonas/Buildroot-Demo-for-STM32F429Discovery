@@ -19,4 +19,4 @@ $(TARGET): $(OBJECTS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -c -o $@ $<
 
 clean:
-	rm -f $(TARGET) $(OBJECTS) fram_state.o spinor_state.o
+	rm -f $(TARGET) $(TARGET).gdb $(OBJECTS) nvmem_state.o spinor_state.o state_record.o
