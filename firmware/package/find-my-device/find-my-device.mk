@@ -107,12 +107,12 @@ FIND_MY_DEVICE_COMPOSITION_DTSI = stm32f429disco-find-my-device.dtsi
 endif
 
 ifeq ($(BR2_PACKAGE_USBSERIALDEVICE),y)
-ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY)),)
+ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY) $(BR2_PACKAGE_FIRMWARE_SCREEN)),)
 FIND_MY_DEVICE_BASE_DTS = stm32f429disco-usbserialdevice-display
 else
 FIND_MY_DEVICE_BASE_DTS = stm32f429disco-usbserialdevice
 endif
-else ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY)),)
+else ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY) $(BR2_PACKAGE_FIRMWARE_SCREEN)),)
 FIND_MY_DEVICE_BASE_DTS = stm32f429disco-display
 else
 FIND_MY_DEVICE_BASE_DTS = stm32f429disco-custom
@@ -139,6 +139,12 @@ define FIND_MY_DEVICE_COPY_DTS
 	$(INSTALL) -D -m 0644 \
 		$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/dts/stm32f429disco-find-my-device-eeprom-device.dtsi \
 		$(LINUX_ARCH_PATH)/boot/dts/stm32f429disco-find-my-device-eeprom-device.dtsi
+	$(INSTALL) -D -m 0644 \
+		$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/dts/stm32f429disco-find-my-device-fram.dtsi \
+		$(LINUX_ARCH_PATH)/boot/dts/stm32f429disco-find-my-device-fram.dtsi
+	$(INSTALL) -D -m 0644 \
+		$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/dts/stm32f429disco-find-my-device-spinor.dtsi \
+		$(LINUX_ARCH_PATH)/boot/dts/stm32f429disco-find-my-device-spinor.dtsi
 	$(INSTALL) -D -m 0644 \
 		$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/dts/$(FIND_MY_DEVICE_COMPOSITION_DTSI) \
 		$(LINUX_ARCH_PATH)/boot/dts/stm32f429disco-find-my-device-config.dtsi

@@ -1,0 +1,60 @@
+/*
+ * Touch-enabled display base owned by BR2_PACKAGE_FIRMWARE_SCREEN.
+ * Screen copies this over the composed stm32f429disco-display.dts name in
+ * the kernel build tree; the tracked Display/Gallery base stays unchanged.
+ */
+#include "stm32f429disco-custom.dts"
+
+&ltdc {
+	status = "okay";
+	pinctrl-0 = <&ltdc_pins_b>;
+	pinctrl-names = "default";
+
+	port {
+		ltdc_out_rgb: endpoint {
+			remote-endpoint = <&panel_in_rgb>;
+		};
+	};
+};
+
+&spi5 {
+	/* CS0 is the gyroscope; CS1 is the LCD controller. */
+	cs-gpios = <&gpioc 1 GPIO_ACTIVE_LOW>,
+		     <&gpioc 2 GPIO_ACTIVE_LOW>;
+
+	display: display@1 {
+		compatible = "st,sf-tc240t-9370-t", "ilitek,ili9341";
+		reg = <1>;
+		spi-3wire;
+		spi-max-frequency = <10000000>;
+		dc-gpios = <&gpiod 13 GPIO_ACTIVE_HIGH>;
+
+		port {
+			panel_in_rgb: endpoint {
+				remote-endpoint = <&ltdc_out_rgb>;
+			};
+		};
+	};
+};
+
+&i2c3 {
+	stmpe811: touchscreen-controller@41 {
+		compatible = "st,stmpe811";
+		reg = <0x41>;
+		interrupt-parent = <&gpioa>;
+		interrupts = <15 IRQ_TYPE_EDGE_FALLING>;
+		st,adc-freq = <1>;
+		st,mod-12b = <1>;
+		st,ref-sel = <0>;
+		st,sample-time = <4>;
+
+		touchscreen {
+			compatible = "st,stmpe-ts";
+			st,ave-ctrl = <3>;
+			st,fraction-z = <7>;
+			st,i-drive = <1>;
+			st,settling = <3>;
+			st,touch-det-delay = <5>;
+		};
+	};
+};

@@ -1,6 +1,7 @@
 config BR2_PACKAGE_DISPLAY
 	bool "Display: PNG/JPEG/GIF/BMP slideshow"
 	depends on !BR2_PACKAGE_GALLERY_PROVIDES_DISPLAY
+	depends on !BR2_PACKAGE_FIRMWARE_SCREEN
 	select BR2_PACKAGE_FBV
 	select BR2_PACKAGE_FBV_PNG
 	select BR2_PACKAGE_FBV_JPEG
@@ -27,6 +28,9 @@ config BR2_PACKAGE_DISPLAY
 
 comment "Standalone Display is disabled by Gallery"
 	depends on BR2_PACKAGE_GALLERY
+
+comment "Standalone Display is disabled by Screen"
+	depends on BR2_PACKAGE_FIRMWARE_SCREEN
 
 if BR2_PACKAGE_DISPLAY
 

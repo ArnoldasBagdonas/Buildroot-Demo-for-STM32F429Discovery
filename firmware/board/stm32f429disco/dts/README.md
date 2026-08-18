@@ -188,6 +188,11 @@ Selecting `BR2_PACKAGE_GALLERY` also builds the display DTB while leaving the
 standalone Display package disabled. Gallery's default-off
 `BR2_PACKAGE_GALLERY_SDCARD` built-in-support option selects
 `stm32f429disco-display-sdcard.dtb`, adding the SPI4 SD-card slot.
+Selecting `BR2_PACKAGE_FIRMWARE_SCREEN` instead copies the touch-enabled
+`stm32f429disco-screen.dts` base under the expected display name in the kernel
+build tree. Existing `*-display*.dts` compositions are reused, and the
+STMPE811 at I2C3 address 0x41 is added without affecting an optional 24LC16B
+at 0x50-0x57. Screen, Display, and Gallery are mutually exclusive fb0 owners.
 
 Selecting `BR2_PACKAGE_SPINAND` appends `-spinand` to the active minimal,
 Display, or USB + Display DTB. The flash shares SPI5 clock and data on

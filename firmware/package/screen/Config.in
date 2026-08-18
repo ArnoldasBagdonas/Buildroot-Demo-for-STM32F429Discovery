@@ -1,0 +1,29 @@
+config BR2_PACKAGE_FIRMWARE_SCREEN
+	bool "Screen: touch console with on-screen keyboard"
+	depends on !BR2_PACKAGE_SCREEN
+	help
+	  Enable the STM32F429Discovery LCD and STMPE811 touchscreen and
+	  install a small framebuffer terminal as /usr/bin/screen. Screen
+	  starts an interactive BusyBox shell on a private PTY; the USART
+	  serial shell remains the recovery and diagnostic console.
+
+	  This example directly owns /dev/fb0 and cannot run with the Display
+	  or Gallery examples. It is unrelated to the GNU Screen package.
+
+comment "Screen is disabled by GNU Screen (/usr/bin/screen conflict)"
+	depends on BR2_PACKAGE_SCREEN
+
+if BR2_PACKAGE_FIRMWARE_SCREEN
+
+menu "Screen options"
+
+config BR2_PACKAGE_FIRMWARE_SCREEN_AUTOSTART
+	bool "Start the touch console automatically at boot"
+	help
+	  Install the screen-auto service link. The minimal init script starts
+	  a supervisor which waits for both /dev/fb0 and the STMPE811 evdev
+	  device before launching the LCD shell.
+
+endmenu
+
+endif

@@ -91,6 +91,7 @@ diagnostic package may be selected in addition to any one example:
 | `ioexample8` | `BR2_PACKAGE_IOEXAMPLE8` | `ioexample8` | RS-485 test, defaulting to `/dev/ttySTM1` |
 | `gallery` | `BR2_PACKAGE_GALLERY` | `gallery`, `display`; optional `sdcard` | BusyBox-style image viewer with optional SD-card composition |
 | `display` | `BR2_PACKAGE_DISPLAY` | `display`, `display-auto` | Independent LCD slideshow using embedded images |
+| `screen` | `BR2_PACKAGE_FIRMWARE_SCREEN` | `screen`, optional `screen-auto` | Independent framebuffer touch console with on-screen keyboard |
 | `displaydebug` | `BR2_PACKAGE_DISPLAYDEBUG` | `displaydebug` | Optional reusable kernel and peripheral diagnostics |
 | `usbserialdevice` | `BR2_PACKAGE_USBSERIALDEVICE` | `usbserialchat` | USB CDC ACM data port with a loopback test utility |
 | `spinand` | `BR2_PACKAGE_SPINAND` | `spinand-ubi` | Shared-SPI5 W25N02KV with a 32 MiB UBI/UBIFS data volume |
@@ -100,6 +101,8 @@ Wiring, build, initialization, and persistence-test instructions for the
 SPI-NAND package are in [`spinand/README.md`](spinand/README.md).
 The display-compatible SD-card wiring and usage are in
 [`sdcard/README.md`](sdcard/README.md).
+The LCD terminal architecture, touch calibration, and recovery workflow are in
+[`screen/README.md`](screen/README.md).
 
 Gallery's built-in SD support and standalone SD are alternative owners of the
 same `sdcard` command. Selecting `BR2_PACKAGE_GALLERY_SDCARD` disables

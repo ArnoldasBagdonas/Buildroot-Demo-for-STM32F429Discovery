@@ -36,12 +36,12 @@ LINUX_KCONFIG_FRAGMENT_FILES += \
 endif
 
 ifeq ($(BR2_PACKAGE_USBSERIALDEVICE),y)
-ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY)),)
+ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY) $(BR2_PACKAGE_FIRMWARE_SCREEN)),)
 SPINAND_BASE_DTS = stm32f429disco-usbserialdevice-display
 else
 SPINAND_BASE_DTS = stm32f429disco-usbserialdevice
 endif
-else ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY)),)
+else ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY) $(BR2_PACKAGE_FIRMWARE_SCREEN)),)
 SPINAND_BASE_DTS = stm32f429disco-display
 else
 SPINAND_BASE_DTS = stm32f429disco-custom

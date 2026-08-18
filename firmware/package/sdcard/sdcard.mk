@@ -43,13 +43,13 @@ LINUX_PRE_BUILD_HOOKS += SDCARD_COPY_DTSI
 
 ifneq ($(BR2_PACKAGE_FIND_MY_DEVICE),y)
 ifeq ($(BR2_PACKAGE_USBSERIALDEVICE),y)
-ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY)),)
+ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY) $(BR2_PACKAGE_FIRMWARE_SCREEN)),)
 SDCARD_BASE_DTS = stm32f429disco-usbserialdevice-display
 else
 SDCARD_BASE_DTS = stm32f429disco-usbserialdevice
 endif
 else
-ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY)),)
+ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_GALLERY) $(BR2_PACKAGE_FIRMWARE_SCREEN)),)
 SDCARD_BASE_DTS = stm32f429disco-display
 else
 SDCARD_BASE_DTS = stm32f429disco-custom

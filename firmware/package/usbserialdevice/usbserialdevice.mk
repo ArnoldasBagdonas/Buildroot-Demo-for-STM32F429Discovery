@@ -19,7 +19,7 @@ LINUX_PATCHES += \
 LINUX_KCONFIG_FRAGMENT_FILES += \
 	$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/linux-usbserialdevice.config
 
-ifeq ($(BR2_PACKAGE_DISPLAY),y)
+ifneq ($(filter y,$(BR2_PACKAGE_DISPLAY) $(BR2_PACKAGE_FIRMWARE_SCREEN)),)
 USBSERIALDEVICE_DTS = stm32f429disco-usbserialdevice-display
 else
 USBSERIALDEVICE_DTS = stm32f429disco-usbserialdevice

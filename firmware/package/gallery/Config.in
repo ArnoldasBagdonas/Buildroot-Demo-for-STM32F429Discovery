@@ -3,6 +3,7 @@ config BR2_PACKAGE_GALLERY_PROVIDES_DISPLAY
 
 config BR2_PACKAGE_GALLERY
 	bool "Gallery: PNG/JPEG/GIF/BMP slideshow"
+	depends on !BR2_PACKAGE_FIRMWARE_SCREEN
 	select BR2_PACKAGE_GALLERY_PROVIDES_DISPLAY
 	select BR2_PACKAGE_FBV
 	select BR2_PACKAGE_FBV_PNG
@@ -22,6 +23,9 @@ config BR2_PACKAGE_GALLERY
 	  standalone SD-card package may coexist while Gallery's built-in SD
 	  support is disabled. Enabling built-in support disables the standalone
 	  package so that the sdcard command has exactly one owner.
+
+comment "Gallery is disabled by Screen"
+	depends on BR2_PACKAGE_FIRMWARE_SCREEN
 
 if BR2_PACKAGE_GALLERY
 

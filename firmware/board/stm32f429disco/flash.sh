@@ -61,6 +61,10 @@ if [ -f "${CONFIG_FILE}" ] && \
   DISPLAY_ENABLED=true
 fi
 if [ -f "${CONFIG_FILE}" ] && \
+   grep -q '^BR2_PACKAGE_FIRMWARE_SCREEN=y$' "${CONFIG_FILE}"; then
+  DISPLAY_ENABLED=true
+fi
+if [ -f "${CONFIG_FILE}" ] && \
    grep -q '^BR2_PACKAGE_GALLERY_SDCARD=y$' "${CONFIG_FILE}"; then
   SDCARD_ENABLED=true
 fi
