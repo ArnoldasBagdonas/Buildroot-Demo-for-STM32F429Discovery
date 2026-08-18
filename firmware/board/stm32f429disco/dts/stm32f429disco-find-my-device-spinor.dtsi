@@ -1,0 +1,3 @@
+/* Compose Find My Device with raw-only or raw-plus-JFFS2 SPI-NOR storage. */
+#include "stm32f429disco-find-my-device.dtsi"
+#include "stm32f429disco-spinor-device.dtsi"

@@ -1,6 +1,5 @@
 config BR2_PACKAGE_FIND_MY_DEVICE
 	bool "Find My Device: W5500, mDNS, and onboarding API"
-	depends on !BR2_PACKAGE_GALLERY_SDCARD
 	help
 	  Install a Linux implementation of the FreeRTOS Find My Device
 	  reference target. It enables a W5500 on shared SPI5 with its own
@@ -12,13 +11,43 @@ config BR2_PACKAGE_FIND_MY_DEVICE
 	  the STM32 factory unique ID. Optional external confirmation-button
 	  and status-LED GPIOs avoid every pin used by the existing examples.
 
-	  When the standalone SD-card package is also selected, Find My Device
-	  stores its persistent state below /mnt/sdcard. It still works without
-	  SD-card support and then keeps state in the RAM-backed root filesystem.
+	  Persistent state can use optional filesystem-free CY15B256Q FRAM or
+	  W25Q128FV SPI-NOR storage, or a mounted standalone storage package.
+	  Runtime detection selects the first available backend and falls back
+	  safely to the RAM-backed root filesystem.
 
 if BR2_PACKAGE_FIND_MY_DEVICE
 
 menu "Find My Device options"
+
+config BR2_PACKAGE_FIND_MY_DEVICE_FRAM
+	bool "Enable CY15B256Q SPI-FRAM"
+	help
+	  Enable a Cypress CY15B256Q SPI FRAM on the shared SPI5 bus. It uses
+	  PG2 (P2 pin 62) as its dedicated active-low chip select and is
+	  exposed by the Linux AT25/NVMEM driver.
+
+	  Find My Device stores two alternating, checksummed records in the
+	  first 512 bytes. If the FRAM is absent or fails to probe, startup
+	  continues with mounted storage packages and then RAM.
+
+config BR2_PACKAGE_FIND_MY_DEVICE_FRAM_SELECTED
+	bool
+	default y if BR2_PACKAGE_FIND_MY_DEVICE_FRAM
+
+config BR2_PACKAGE_FIND_MY_DEVICE_SPINOR_STATE
+	bool "Enable W25Q128FV SPI-NOR"
+	depends on !BR2_PACKAGE_FIND_MY_DEVICE_FRAM_SELECTED
+	help
+	  Enable a W25Q128FV on the shared SPI5 bus and reserve its first two
+	  4 KiB erase sectors for Find My Device. State is accessed directly
+	  through raw MTD, without a filesystem, and written as alternating
+	  records with generation counters, CRC32, and read-back verification.
+	  An interrupted erase or write leaves the previous sector usable.
+
+	  This option is independent of the standalone SPI-NOR package. If that
+	  package is also selected, it exposes the remaining NOR capacity as an
+	  independent JFFS2 filesystem at /mnt/spinor.
 
 config BR2_PACKAGE_FIND_MY_DEVICE_COMPRESS_INITRAMFS
 	bool "Compress the initramfs with gzip"
@@ -48,6 +77,3 @@ config BR2_PACKAGE_FIND_MY_DEVICE_CONSOLE_DEBUG
 endmenu
 
 endif
-
-comment "Find My Device is unavailable with Gallery SD-card composition"
-	depends on BR2_PACKAGE_GALLERY_SDCARD

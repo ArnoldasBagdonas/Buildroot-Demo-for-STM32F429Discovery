@@ -11,6 +11,9 @@ FreeRTOS `find-my-device` project next to this repository. It provides:
 - API v3 device information, OAuth authorization-code + PKCE, physical
   confirmation, refresh-token rotation, renaming, mobile registration, and
   authenticated WebSocket status events;
+- optional power-loss-safe state storage in CY15B256Q SPI FRAM;
+- optional alternating raw-MTD records on the W25Q128FV SPI-NOR;
+- runtime use of mounted SD, SPI-NOR/JFFS2, and SPI-NAND/UBIFS storage;
 - on-board USER-button confirmation and green status-LED controls.
 
 ## W5500 wiring
@@ -41,15 +44,47 @@ under 10 cm), route a ground wire beside it, and do not use 5 V level signals.
 The connector numbers and power pins come from ST's UM1670 board manual. The
 SPI5 alternate functions are PF7/PF8/PF9 in the STM32F429 datasheet.
 
+## Optional CY15B256Q FRAM wiring
+
+Select **Find My Device options → Enable CY15B256Q SPI-FRAM** to add the Linux
+AT25/NVMEM driver and the SPI5 FRAM node. Power the board off before connecting
+or disconnecting the device. CY15B256Q signals are 3.3 V only.
+
+| CY15B256Q label | STM32 signal | Discovery connector |
+|---|---|---|
+| `SCK` | PF7 / SPI5_SCK | P2 pin 6 |
+| `SO` / `MISO` | PF8 / SPI5_MISO | P2 pin 5 |
+| `SI` / `MOSI` | PF9 / SPI5_MOSI | P2 pin 8 |
+| `CS#` | PG2, active low | P2 pin 62 |
+| `WP#` | pull up to 3.3 V | — |
+| `HOLD#` | pull up to 3.3 V | — |
+| `VDD` | 3.3 V | P2 pin 1 or pin 2 |
+| `VSS` / `GND` | ground | P2 pin 11 or pin 29 |
+
+Add approximately 10 kΩ pull-ups from `CS#`, `WP#`, and `HOLD#` to 3.3 V so
+the device remains deselected and writable while MCU pins are being configured.
+Place a 100 nF ceramic decoupling capacitor close to a bare FRAM IC's VDD/VSS
+pins. Breakout boards may already provide these parts; check their schematic.
+The device-tree limit is 10 MHz.
+
+The alternative W25Q128FV reuses the same SPI5 signals and PG2 chip select.
+Select **Enable W25Q128FV SPI-NOR** under Find My Device to enable two raw 4 KiB
+A/B state sectors without a filesystem. The option does not require the
+standalone SPI-NOR package. If that package is also selected, the rest of the
+chip becomes the JFFS2 volume documented in
+[`package/spinor/README.md`](../spinor/README.md). CY15B256Q and W25Q128FV
+cannot be selected or wired simultaneously because they share PG2/CS4.
+
 ## Hardware compatibility
 
 The W5500 shares SPI5 clock and data with the correctly tri-stating onboard
-gyroscope, LCD controller, and optional SPI-NAND. Each device has a different
-active-low chip select: gyroscope PC1 (`reg = <0>`), LCD PC2 (`reg = <1>`),
-W5500 PD5 (`reg = <2>`), and SPI-NAND PG3 (`reg = <3>`). W5500 interrupt
-remains on PE3. Linux serializes their SPI5 messages, so Display or NAND
-activity can add network latency, but chip selection remains electrically
-valid.
+gyroscope, LCD controller, optional SPI-NAND, and either FRAM or SPI-NOR. Each device
+has a different active-low chip select: gyroscope PC1 (`reg = <0>`), LCD PC2
+(`reg = <1>`), W5500 PD5 (`reg = <2>`), SPI-NAND PG3 (`reg = <3>`), and
+FRAM/SPI-NOR PG2 (`reg = <4>`). W5500 interrupt remains on PE3. Linux serializes their SPI5
+messages, so Display or NAND activity can add network latency, but chip
+selection remains electrically valid. The small raw-state transfers have negligible
+bus impact.
 
 The SD card stays alone on SPI4 and therefore shares no clock, data, or
 chip-select signal with W5500 or SPI-NAND. This separation is important for
@@ -64,7 +99,7 @@ their current peripherals:
 
 | Existing function | Pins/peripheral left untouched |
 |---|---|
-| LCD, gyroscope, SPI-NAND | SPI5 PF7/PF8/PF9 shared; CS PC1/PC2/PG3, W5500 CS PD5 |
+| LCD, gyroscope, SPI-NAND, FRAM/SPI-NOR | SPI5 PF7/PF8/PF9 shared; CS PC1/PC2/PG3/PG2, W5500 CS PD5 |
 | SD card | Separate SPI4 PE2/PE5/PE6 bus |
 | USB USER CDC | PB12/PB14/PB15, OTG HS embedded FS PHY |
 | Console | USART1 PA9/PA10 |
@@ -179,31 +214,54 @@ OAuth refresh state survive a daemon restart during one boot but not a power
 cycle. With `FMD_STATE_FILE=auto`, startup checks persistent storage at runtime
 in this order:
 
-1. a mounted standalone SD card;
-2. the initialized SPI-NAND UBIFS volume; and
-3. the RAM-backed root filesystem as a safe fallback.
+1. CY15B256Q FRAM, when its Find My Device option is enabled and it probes;
+2. the W25Q128FV raw state partition, when its option is enabled;
+3. a mounted standalone SD card;
+4. the mounted SPI-NOR JFFS2 volume;
+5. the initialized SPI-NAND UBIFS volume; and
+6. the RAM-backed root filesystem as a safe fallback.
 
 The persistent paths are:
 
 ```text
+/sys/bus/spi/devices/<SPI5-device>/fram
+/dev/mtdX                         (label: find-my-device-state)
 /mnt/sdcard/find-my-device/state
+/mnt/spinor/find-my-device/state
 /mnt/spinand/find-my-device/state
 ```
 
 This is a runtime policy rather than a Kconfig dependency: Find My Device stays
-independent of both storage examples and only uses helpers and mounts present
-in the running image. Startup prints the chosen path and `backend=sdcard`,
-`backend=spinand`, or `backend=ram`. If no persistent volume can be mounted,
-Find My Device remains usable with temporary RAM state. Do not unmount the
-selected volume while the daemon is running. State updates are written through
-a temporary file, synchronized, and renamed into place before success is
-reported.
+independent of the storage examples and only uses helpers and mounts present
+in the running image. Startup prints the chosen path and `backend=fram`,
+`backend=spinor-raw`, `backend=sdcard`, `backend=spinor`, `backend=spinand`,
+or `backend=ram`. If no persistent device
+or volume is available, Find My Device remains usable with temporary RAM state.
+Do not unmount the selected filesystem volume while the daemon is running.
+
+FRAM is raw NVMEM rather than a mounted filesystem. Find My Device reserves its
+first 512 bytes as two alternating 256-byte records. Each record contains a
+generation counter and CRC32; a new record is read back and verified before it
+is accepted, while the previous record remains available after an interrupted
+write. Filesystem state updates continue to use a temporary file, `fsync`, and
+atomic rename.
+
+Raw SPI-NOR state uses the same record format but places each record in a
+different 4 KiB erase sector. Before writing the inactive record, the daemon
+erases only that record's sector, writes 256 bytes synchronously, and reads it
+back for verification. The previous block remains valid across an interrupted
+erase or program operation. The adjacent JFFS2 partition is independent.
 
 ## Configuration
 
-The **Find My Device options** menu contains **Enable console button and LED
-debug controls**. It is disabled by default so production images do not carry
-test controls or their console messages. When selected, use:
+The **Find My Device options** menu directly contains **Enable CY15B256Q
+SPI-FRAM**, **Enable W25Q128FV SPI-NOR**, and **Enable console button and LED
+debug controls**. Both storage options operate without a filesystem and are
+disabled by default. They are mutually exclusive because both use PG2;
+selecting SPI-FRAM also disables the standalone SPI-NOR package. The W25Q
+option is available without the standalone SPI-NOR/JFFS2 package. The console
+option adds test controls and diagnostic messages. When console controls are
+selected, use:
 
 ```sh
 find-my-device-debug button  # simulate one complete USER-button tap
@@ -220,6 +278,10 @@ are omitted when the option is disabled.
 
 Edit `find-my-device.conf` in this package and rebuild to change the interface,
 port, initial name/model, state paths, storage waits, or optional GPIOs. The
-default `FMD_STATE_FILE=auto` applies the SD → SPI-NAND → RAM runtime policy.
-Set an explicit absolute path to override that behavior. Files under `/etc` on
-a running board are RAM-backed and reset to the built image on reboot.
+default `FMD_STATE_FILE=auto` applies the FRAM → raw SPI-NOR → SD → SPI-NOR
+JFFS2 → SPI-NAND → RAM runtime policy. `FMD_FRAM_STATE_DEVICE=auto` discovers
+the SPI driver's `fram` sysfs file; set it explicitly only if the system has
+more than one SPI FRAM. Set an explicit `FMD_SPINOR_RAW_DEVICE` only when
+automatic discovery by MTD partition label is unsuitable. Set an explicit
+absolute state path to override automatic selection. Files under `/etc` on a
+running board are RAM-backed and reset to the built image on reboot.

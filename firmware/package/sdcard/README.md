@@ -12,8 +12,9 @@ The chosen SPI4 pins do not overlap the STM32F429 Discovery LCD. The standalone
 package remains independent of Display; select `BR2_PACKAGE_GALLERY` for the
 supported Gallery image. It can be selected with Find My Device: the card
 stays on SPI4 and W5500 uses SPI5, so the external modules do not share MISO.
-The package remains mutually exclusive with the separate
-SPI-NAND storage image because of the internal-flash image-size limit.
+It may also coexist with the SPI-NAND and SPI-NOR storage packages. `make
+flash` reports the resulting image size and refuses it only if that particular
+build exceeds internal flash.
 
 ## How the helper is integrated
 
@@ -110,22 +111,27 @@ conflict with the LCD signals on PA4 and PA6.
 
 The W5500 Find My Device example uses SPI5 on PF7, PF8, and PF9, with PD5 chip
 select and PE3 interrupt. It does not share SPI4 or the SD adapter's MISO
-signal. This is deliberate: some low-cost SD adapters keep MISO driven through
+signal. Find My Device's optional CY15B256Q FRAM shares those SPI5 data lines
+and uses PG2 chip select. The alternative W25Q128FV SPI-NOR uses the same PG2
+connection and also remains independent of the SPI4
+SD adapter. This is deliberate: some low-cost SD adapters keep MISO driven through
 their level-shifter circuit even while PE4 chip select is high. Separate chip
 selects cannot repair that electrical behavior, whereas separate controllers
 and data pins do. Selecting both packages builds a combined
 `-w5500-sdcard.dtb`; Find My Device then stores persistent state under
 `/mnt/sdcard/find-my-device` when the card mounts successfully.
 
-The current prohibition against selecting the SD card together with SPI-NAND
-is a software/image-size restriction, not a hardware conflict. SPI-NAND uses
-SPI5 with PG3 chip select while SD remains the only device on SPI4. Their
-transfers can proceed on separate controllers.
+SD, SPI-NAND, and SPI-NOR may be selected together. SPI-NAND uses SPI5 with PG3
+chip select, SPI-NOR uses SPI5 with PG2 chip select, and SD remains the only
+device on SPI4. The final compressed image must still pass the
+2,048,000-byte flash-size check.
 
 | Feature | SD-card coexistence | Pins |
 |---------|---------------------|------|
 | W5500 | Yes | Separate SPI5 PF7/PF8/PF9; W5500 CS PD5 and IRQ PE3 |
-| SPI-NAND | Yes in hardware; unavailable in Kconfig | Separate SPI5 PF7/PF8/PF9; NAND CS PG3 |
+| CY15B256Q FRAM | Yes with Find My Device | Separate SPI5 PF7/PF8/PF9; FRAM CS PG2 |
+| W25Q128FV SPI-NOR | Yes; alternative to FRAM | Separate SPI5 PF7/PF8/PF9; NOR CS PG2 |
+| SPI-NAND | Yes | Separate SPI5 PF7/PF8/PF9; NAND CS PG3 |
 | USB CDC | Yes | PB12/PB14/PB15 |
 | SPI5 gyroscope | Yes | SPI5 shared with W5500/SPI-NAND; gyro CS PC1 |
 | I²C3 | Yes | PA8/PC9 |
@@ -181,8 +187,8 @@ test -s buildroot/output/images/stm32f429disco-custom-sdcard.dtb
 stat -c 'xipImage size: %s bytes' buildroot/output/images/xipImage
 ```
 
-Do not flash if `xipImage` exceeds 2,048,000 bytes. `make flash` enforces this
-limit, reads the selection, and automatically uses
+`make flash` prints the actual size and enforces the 2,048,000-byte limit,
+reads the selection, and automatically uses
 `stm32f429disco-custom-sdcard.dtb`.
 
 The SD package always applies the shared compact kernel fragment, which removes

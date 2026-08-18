@@ -117,35 +117,48 @@ show_status()
 mount_volume()
 {
 	require_mtd
+	if ! ubi_is_attached; then
+		echo "SPI-NAND: attaching UBI to $MTD_DEV synchronously; scanning may take a while..."
+	fi
 	if ! attach_ubi; then
+		echo "SPI-NAND: UBI attach failed; persistent volume is unavailable." >&2
 		suggest_format
 		return 1
 	fi
 	if [ ! -e "/sys/class/ubi/ubi${UBI_NUM}_0" ]; then
+		echo "SPI-NAND: UBI attached, but the '$VOLUME_NAME' volume is unavailable." >&2
 		suggest_format
 		return 1
 	fi
 	mkdir -p "$MOUNT_POINT"
 	if ! is_mounted; then
-		mount -t ubifs "ubi${UBI_NUM}:$VOLUME_NAME" "$MOUNT_POINT"
+		echo "SPI-NAND: mounting UBIFS from ubi${UBI_NUM}:$VOLUME_NAME..."
+		if ! mount -t ubifs "ubi${UBI_NUM}:$VOLUME_NAME" "$MOUNT_POINT"; then
+			echo "SPI-NAND: UBIFS mount failed; persistent volume is unavailable." >&2
+			return 1
+		fi
 	fi
-	echo "UBIFS mounted at $MOUNT_POINT"
+	echo "SPI-NAND: UBIFS mount succeeded at $MOUNT_POINT."
 }
 
 auto_mount_volume()
 {
 	mkdir -p /var/run
+	echo "SPI-NAND: boot-time detection, UBI attach, and synchronous mount started."
 	echo checking > "$BOOT_STATUS"
 	if ! wait_for_mtd; then
 		echo "SPI-NAND MTD partition '$MTD_NAME' was not detected during boot." >&2
 		echo "Check the wiring and that the -spinand DTB was flashed." >&2
+		echo "SPI-NAND: boot-time mount failed; boot will continue without this volume." >&2
 		echo missing > "$BOOT_STATUS"
 		return 1
 	fi
 	if mount_volume; then
+		echo "SPI-NAND: boot-time mount completed successfully."
 		echo mounted > "$BOOT_STATUS"
 		return 0
 	fi
+	echo "SPI-NAND: boot-time mount failed; boot will continue without this volume." >&2
 	echo unavailable > "$BOOT_STATUS"
 	return 1
 }

@@ -56,15 +56,17 @@ describes the board wiring:
   endpoints.
 - SPI5 chip select 0 on PC1 remains assigned to the gyroscope. Chip select 1
   on PC2 controls the LCD, optional W5500 uses chip select 2 on PD5, and
-  optional SPI-NAND uses chip select 3 on PG3. PD13 is the LCD data/command
-  signal.
+  optional SPI-NAND uses chip select 3 on PG3. Find My Device's optional
+  CY15B256Q FRAM or the alternative W25Q128FV SPI-NOR uses chip select 4 on
+  PG2. PD13 is the LCD data/command signal.
 - The panel uses its board-specific `st,sf-tc240t-9370-t` compatibility and a
   maximum 10 MHz three-wire SPI control interface.
 - The UART examples use UART5 on PC12/PD2 and RS-485 DE on PD4. These free
   expansion-header pins do not overlap LTDC, so serial and display examples
   can be selected together.
-- SPI-NAND shares SPI5 on PF7/PF8/PF9 and uses PG3 chip select. Linux
-  serializes its messages with LCD control, the gyroscope, and optional W5500.
+- SPI-NAND and FRAM/SPI-NOR share SPI5 on PF7/PF8/PF9 and use PG3 and PG2 chip selects.
+  Linux serializes their messages with LCD control, the gyroscope, and optional
+  W5500.
   Display and SPI-NAND can be selected together subject to the internal-flash
   size check; framebuffer pixels themselves travel through LTDC, not SPI5.
 - The SD adapter remains alone on SPI4 PE2/PE4/PE5/PE6, so an adapter with a

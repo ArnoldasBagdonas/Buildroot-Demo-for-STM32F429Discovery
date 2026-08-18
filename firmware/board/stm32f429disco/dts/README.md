@@ -194,6 +194,22 @@ Display, or USB + Display DTB. The flash shares SPI5 clock and data on
 PF7/PF8/PF9 with the onboard devices and optional W5500, and uses its dedicated
 PG3 chip select (`reg = <3>`). The SD adapter remains the only SPI4 device.
 
+Selecting `BR2_PACKAGE_FIND_MY_DEVICE_FRAM` augments the active W5500 DTB with
+a CY15B256Q on SPI5 chip select 4, using PG2 on P2 pin 62. It does not add a new
+DTB filename: the Find My Device build hook installs either the base or
+FRAM-enabled composition as `stm32f429disco-find-my-device-config.dtsi` before
+the selected DTB is compiled. This keeps the minimal, Display, USB, SD, and
+SPI-NAND compositions consistent without a matrix of extra filename suffixes.
+
+Selecting `BR2_PACKAGE_SPINOR` similarly composes a W25Q128FV on SPI5 chip
+select 4 (PG2). Its first two 4 KiB erase sectors are always the raw
+`find-my-device-state` partition and the remaining 16,376 KiB is the
+`spinor-jffs2` partition. `BR2_PACKAGE_FIND_MY_DEVICE_SPINOR_STATE` can instead
+enable only the raw W25Q device and partition, without JFFS2 or the standalone
+package. The generated composition also supports simultaneous standalone SD
+and SPI-NAND devices. SPI-NOR and CY15B256Q FRAM remain mutually exclusive
+because both use PG2.
+
 **Device Tree** (`stm32f429disco-custom.dts`)
 
 ```dts

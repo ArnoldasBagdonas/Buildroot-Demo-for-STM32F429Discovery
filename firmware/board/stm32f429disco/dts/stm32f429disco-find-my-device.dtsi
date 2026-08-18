@@ -5,7 +5,8 @@
  * GPIO: PD5=nSCS, PE3=nINT
  *
  * SPI5 is already used by the onboard gyroscope (CS0) and LCD controller
- * (CS1); W5500 uses CS2 on PD5 and optional SPI-NAND uses CS3 on PG3.
+ * (CS1); W5500 uses CS2 on PD5, optional SPI-NAND uses CS3 on PG3, and
+ * optional CY15B256Q FRAM or W25Q128FV SPI-NOR uses CS4 on PG2.
  * Keeping these devices off SPI4 isolates them from SD adapters whose level
  * shifters do not release MISO while deselected.
 */

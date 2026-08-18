@@ -1,6 +1,12 @@
 #define _GNU_SOURCE
 
 #include "device_info.h"
+#ifdef FMD_FRAM_STATE
+#include "fram_state.h"
+#endif
+#ifdef FMD_SPINOR_STATE
+#include "spinor_state.h"
+#endif
 #include "mdns_codec.h"
 #include "oauth_service.h"
 
@@ -65,6 +71,12 @@ typedef struct
     bool button_active_low;
     bool gpio_enabled;
     bool prepare_interface;
+#ifdef FMD_FRAM_STATE
+    bool state_is_fram;
+#endif
+#ifdef FMD_SPINOR_STATE
+    bool state_is_spinor;
+#endif
     bool device_id_override_set;
     uint64_t device_id_override;
 } Options;
@@ -77,6 +89,15 @@ typedef struct
     char device_name[64];
     OAuthPersistentState oauth;
 } PersistentState;
+
+#ifdef FMD_FRAM_STATE
+_Static_assert(sizeof(PersistentState) <= FRAM_STATE_MAX_PAYLOAD,
+               "Find My Device state does not fit one FRAM record");
+#endif
+#ifdef FMD_SPINOR_STATE
+_Static_assert(sizeof(PersistentState) <= SPINOR_STATE_MAX_PAYLOAD,
+               "Find My Device state does not fit one SPI-NOR record");
+#endif
 
 typedef struct
 {
@@ -222,6 +243,12 @@ static void usage(const char *program)
             "  --interface NAME       network interface (default eth0)\n"
             "  --port PORT            HTTP port (default 8080)\n"
             "  --state PATH           persistent state file\n"
+#ifdef FMD_FRAM_STATE
+            "  --state-fram           PATH is a raw FRAM NVMEM device\n"
+#endif
+#ifdef FMD_SPINOR_STATE
+            "  --state-spinor         PATH is a raw SPI-NOR MTD partition\n"
+#endif
             "  --name NAME            initial friendly name\n"
             "  --model MODEL          product model\n"
             "  --address IPV4         address override for host tests\n"
@@ -261,6 +288,14 @@ static bool parse_options(int argc, char **argv, Options *options, const char **
             options->button_active_low = true;
         else if (strcmp(option, "--prepare-interface") == 0)
             options->prepare_interface = true;
+#ifdef FMD_FRAM_STATE
+        else if (strcmp(option, "--state-fram") == 0)
+            options->state_is_fram = true;
+#endif
+#ifdef FMD_SPINOR_STATE
+        else if (strcmp(option, "--state-spinor") == 0)
+            options->state_is_spinor = true;
+#endif
         else if (strcmp(option, "--help") == 0)
         {
             usage(argv[0]);
@@ -533,6 +568,16 @@ static bool save_persistent_state(Application *application)
     application->persistent.size = (uint16_t)sizeof(application->persistent);
     snprintf(application->persistent.device_name, sizeof(application->persistent.device_name), "%s",
              application->device_name);
+#ifdef FMD_FRAM_STATE
+    if (application->options.state_is_fram)
+        return fram_state_save(application->options.state_path, &application->persistent,
+                               sizeof(application->persistent));
+#endif
+#ifdef FMD_SPINOR_STATE
+    if (application->options.state_is_spinor)
+        return spinor_state_save(application->options.state_path, &application->persistent,
+                                 sizeof(application->persistent));
+#endif
     length = snprintf(temporary, sizeof(temporary), "%s.tmp", application->options.state_path);
     if (length <= 0 || (size_t)length >= sizeof(temporary))
         return false;
@@ -559,12 +604,33 @@ static void load_persistent_state(Application *application, const char *initial_
 {
     FILE *file;
     PersistentState state;
+    bool loaded = false;
     memset(&application->persistent, 0, sizeof(application->persistent));
+    memset(&state, 0, sizeof(state));
     snprintf(application->device_name, sizeof(application->device_name), "%s", initial_name);
-    file = fopen(application->options.state_path, "rb");
-    if (file == NULL)
-        return;
-    if (fread(&state, sizeof(state), 1U, file) == 1U && state.magic == STATE_MAGIC &&
+#ifdef FMD_FRAM_STATE
+    if (application->options.state_is_fram)
+    {
+        loaded = fram_state_load(application->options.state_path, &state, sizeof(state));
+    }
+    else
+#endif
+#ifdef FMD_SPINOR_STATE
+    if (application->options.state_is_spinor)
+    {
+        loaded = spinor_state_load(application->options.state_path, &state, sizeof(state));
+    }
+    else
+#endif
+    {
+        file = fopen(application->options.state_path, "rb");
+        if (file != NULL)
+        {
+            loaded = fread(&state, sizeof(state), 1U, file) == 1U;
+            fclose(file);
+        }
+    }
+    if (loaded && state.magic == STATE_MAGIC &&
         state.version == STATE_VERSION && state.size == sizeof(state) &&
         memchr(state.device_name, '\0', sizeof(state.device_name)) != NULL &&
         state.device_name[0] != '\0')
@@ -573,7 +639,6 @@ static void load_persistent_state(Application *application, const char *initial_
         snprintf(application->device_name, sizeof(application->device_name), "%s",
                  state.device_name);
     }
-    fclose(file);
 }
 
 static bool oauth_load(void *context, OAuthPersistentState *state)

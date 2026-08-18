@@ -11,8 +11,14 @@ FMD_HTTP_PORT=${FMD_HTTP_PORT:-8080}
 FMD_DEVICE_NAME=${FMD_DEVICE_NAME:-My Finder}
 FMD_DEVICE_MODEL=${FMD_DEVICE_MODEL:-FINDER-R01}
 FMD_STATE_FILE=${FMD_STATE_FILE:-auto}
+FMD_FRAM_STATE_DEVICE=${FMD_FRAM_STATE_DEVICE:-auto}
+FMD_FRAM_WAIT=${FMD_FRAM_WAIT:-3}
+FMD_SPINOR_RAW_DEVICE=${FMD_SPINOR_RAW_DEVICE:-auto}
+FMD_SPINOR_RAW_WAIT=${FMD_SPINOR_RAW_WAIT:-3}
 FMD_SDCARD_STATE_FILE=${FMD_SDCARD_STATE_FILE:-/mnt/sdcard/find-my-device/state}
 FMD_SDCARD_WAIT=${FMD_SDCARD_WAIT:-10}
+FMD_SPINOR_STATE_FILE=${FMD_SPINOR_STATE_FILE:-/mnt/spinor/find-my-device/state}
+FMD_SPINOR_WAIT=${FMD_SPINOR_WAIT:-10}
 FMD_SPINAND_STATE_FILE=${FMD_SPINAND_STATE_FILE:-/mnt/spinand/find-my-device/state}
 FMD_SPINAND_WAIT=${FMD_SPINAND_WAIT:-10}
 FMD_BUTTON_CHIP=${FMD_BUTTON_CHIP:-/dev/gpiochip0}
@@ -34,11 +40,84 @@ fmd_mountpoint_mounted()
 	return 1
 }
 
+fmd_find_fram()
+{
+	if [ "${FMD_FRAM_STATE_DEVICE}" != auto ]; then
+		if [ -r "${FMD_FRAM_STATE_DEVICE}" ] && [ -w "${FMD_FRAM_STATE_DEVICE}" ]; then
+			FMD_FRAM_DEVICE=${FMD_FRAM_STATE_DEVICE}
+			return 0
+		fi
+		return 1
+	fi
+	for FMD_FRAM_CANDIDATE in /sys/bus/spi/devices/*/fram; do
+		if [ -r "${FMD_FRAM_CANDIDATE}" ] && [ -w "${FMD_FRAM_CANDIDATE}" ]; then
+			FMD_FRAM_DEVICE=${FMD_FRAM_CANDIDATE}
+			return 0
+		fi
+	done
+	return 1
+}
+
+fmd_find_spinor_raw()
+{
+	if [ "${FMD_SPINOR_RAW_DEVICE}" != auto ]; then
+		if [ -r "${FMD_SPINOR_RAW_DEVICE}" ] && [ -w "${FMD_SPINOR_RAW_DEVICE}" ]; then
+			FMD_SPINOR_RAW_MTD=${FMD_SPINOR_RAW_DEVICE}
+			return 0
+		fi
+		return 1
+	fi
+	for FMD_SPINOR_NAME_FILE in /sys/class/mtd/mtd*/name; do
+		[ -r "${FMD_SPINOR_NAME_FILE}" ] || continue
+		read -r FMD_SPINOR_NAME < "${FMD_SPINOR_NAME_FILE}"
+		[ "${FMD_SPINOR_NAME}" = find-my-device-state ] || continue
+		FMD_SPINOR_MTD_DIR=${FMD_SPINOR_NAME_FILE%/name}
+		FMD_SPINOR_RAW_MTD=/dev/${FMD_SPINOR_MTD_DIR##*/}
+		if [ -r "${FMD_SPINOR_RAW_MTD}" ] && [ -w "${FMD_SPINOR_RAW_MTD}" ]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
 FMD_STATE_BACKEND=configured
+FMD_STATE_MODE_ARGS=
 if [ "${FMD_STATE_FILE}" = auto ]; then
 	FMD_STATE_FILE=/var/lib/find-my-device/state
 	FMD_STATE_BACKEND=ram
-	if [ -x /usr/sbin/sdcard ]; then
+	if [ -e /etc/find-my-device-fram ]; then
+		FMD_WAIT=0
+		set +e
+		while ! fmd_find_fram && [ "${FMD_WAIT}" -lt "${FMD_FRAM_WAIT}" ]; do
+			sleep 1
+			FMD_WAIT=$((FMD_WAIT + 1))
+		done
+		set -e
+		if fmd_find_fram; then
+			FMD_STATE_FILE=${FMD_FRAM_DEVICE}
+			FMD_STATE_BACKEND=fram
+			FMD_STATE_MODE_ARGS=--state-fram
+		else
+			echo "find-my-device: CY15B256Q FRAM is not available; trying mounted storage" >&2
+		fi
+	fi
+	if [ "${FMD_STATE_BACKEND}" = ram ] && [ -e /etc/find-my-device-spinor-state ]; then
+		FMD_WAIT=0
+		set +e
+		while ! fmd_find_spinor_raw && [ "${FMD_WAIT}" -lt "${FMD_SPINOR_RAW_WAIT}" ]; do
+			sleep 1
+			FMD_WAIT=$((FMD_WAIT + 1))
+		done
+		set -e
+		if fmd_find_spinor_raw; then
+			FMD_STATE_FILE=${FMD_SPINOR_RAW_MTD}
+			FMD_STATE_BACKEND=spinor-raw
+			FMD_STATE_MODE_ARGS=--state-spinor
+		else
+			echo "find-my-device: raw W25Q128FV state partition is unavailable; trying mounted storage" >&2
+		fi
+	fi
+	if [ "${FMD_STATE_BACKEND}" = ram ] && [ -x /usr/sbin/sdcard ]; then
 		# This also supports starting Find My Device manually before the boot
 		# watcher has completed its first mount attempt.
 		/usr/sbin/sdcard mount >/dev/null 2>&1 || true
@@ -55,8 +134,33 @@ if [ "${FMD_STATE_FILE}" = auto ]; then
 			FMD_STATE_BACKEND=sdcard
 		fi
 	fi
+	if [ "${FMD_STATE_BACKEND}" = ram ] && [ -x /usr/sbin/spinor-jffs2 ]; then
+		# The boot helper mounts initialized volumes before this service. When
+		# automount is disabled, try the same non-destructive mount explicitly.
+		if [ ! -x /usr/sbin/spinor-jffs2-auto ]; then
+			/usr/sbin/spinor-jffs2 mount >/dev/null 2>&1 || true
+		fi
+		FMD_WAIT=0
+		set +e
+		while ! fmd_mountpoint_mounted /mnt/spinor &&
+			[ "${FMD_WAIT}" -lt "${FMD_SPINOR_WAIT}" ]; do
+			if [ -r /var/run/spinor-jffs2.status ]; then
+				read -r FMD_SPINOR_STATUS < /var/run/spinor-jffs2.status
+				case "${FMD_SPINOR_STATUS}" in
+					missing|unavailable) break ;;
+				esac
+			fi
+			sleep 1
+			FMD_WAIT=$((FMD_WAIT + 1))
+		done
+		set -e
+		if fmd_mountpoint_mounted /mnt/spinor; then
+			FMD_STATE_FILE=${FMD_SPINOR_STATE_FILE}
+			FMD_STATE_BACKEND=spinor
+		fi
+	fi
 	if [ "${FMD_STATE_BACKEND}" = ram ] && [ -x /usr/sbin/spinand-ubi ]; then
-		# The package's boot helper normally attaches UBI in the background.
+		# The package's boot helper normally mounts JFFS2 before this service.
 		# If automount was disabled, explicitly try the same non-destructive mount.
 		if [ ! -x /usr/sbin/spinand-ubi-auto ]; then
 			/usr/sbin/spinand-ubi mount >/dev/null 2>&1 || true
@@ -85,12 +189,18 @@ if [ "${FMD_STATE_FILE}" = auto ]; then
 	fi
 fi
 
-FMD_STATE_DIRECTORY=${FMD_STATE_FILE%/*}
-if [ -z "${FMD_STATE_DIRECTORY}" ] || [ "${FMD_STATE_DIRECTORY}" = "${FMD_STATE_FILE}" ]; then
-	echo "find-my-device: state path must include a directory: ${FMD_STATE_FILE}" >&2
-	exit 1
-fi
-mkdir -p "${FMD_STATE_DIRECTORY}" /var/run
+case "${FMD_STATE_BACKEND}" in
+	fram|spinor-raw) ;;
+	*)
+		FMD_STATE_DIRECTORY=${FMD_STATE_FILE%/*}
+		if [ -z "${FMD_STATE_DIRECTORY}" ] || [ "${FMD_STATE_DIRECTORY}" = "${FMD_STATE_FILE}" ]; then
+			echo "find-my-device: state path must include a directory: ${FMD_STATE_FILE}" >&2
+			exit 1
+		fi
+		mkdir -p "${FMD_STATE_DIRECTORY}"
+		;;
+esac
+mkdir -p /var/run
 echo "find_my_device_state=${FMD_STATE_FILE} backend=${FMD_STATE_BACKEND}"
 
 # SPI Ethernet probes asynchronously. Give it a short bounded wait so a
@@ -170,6 +280,7 @@ exec /usr/bin/find-my-device \
 	--interface "${FMD_INTERFACE}" \
 	--port "${FMD_HTTP_PORT}" \
 	--state "${FMD_STATE_FILE}" \
+	${FMD_STATE_MODE_ARGS} \
 	--name "${FMD_DEVICE_NAME}" \
 	--model "${FMD_DEVICE_MODEL}" \
 	${FMD_GPIO_ARGS}

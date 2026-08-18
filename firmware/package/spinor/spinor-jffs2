@@ -1,0 +1,163 @@
+#!/bin/sh
+
+set -e
+
+MTD_NAME=spinor-jffs2
+MTD_SOURCE=mtd:$MTD_NAME
+MOUNT_POINT=/mnt/spinor
+BOOT_WAIT_SECONDS=${SPINOR_BOOT_WAIT:-2}
+BOOT_STATUS=/var/run/spinor-jffs2.status
+
+find_mtd_num()
+{
+	for name_file in /sys/class/mtd/mtd*/name; do
+		[ -r "$name_file" ] || continue
+		read -r mtd_name < "$name_file"
+		if [ "$mtd_name" = "$MTD_NAME" ]; then
+			mtd=${name_file%/name}
+			mtd=${mtd%/}
+			mtd=${mtd##*/mtd}
+			MTD_NUM=$mtd
+			MTD_DEV=/dev/mtd${MTD_NUM}
+			return 0
+		fi
+	done
+	return 1
+}
+
+require_mtd()
+{
+	find_mtd_num || {
+		echo "SPI-NOR MTD partition '$MTD_NAME' was not found." >&2
+		echo "Check the wiring and that the SPI-NOR DTB was flashed." >&2
+		exit 1
+	}
+}
+
+wait_for_mtd()
+{
+	waited=0
+	while ! find_mtd_num && [ "$waited" -lt "$BOOT_WAIT_SECONDS" ]; do
+		sleep 1
+		waited=$((waited + 1))
+	done
+	find_mtd_num
+}
+
+is_mounted()
+{
+	grep -q " $MOUNT_POINT " /proc/mounts 2>/dev/null
+}
+
+suggest_format()
+{
+	echo "SPI-NOR was detected, but it has no mountable JFFS2 filesystem." >&2
+	echo "Inspect it without changing data: spinor-jffs2 status" >&2
+	echo "To erase and initialize it once: spinor-jffs2 format --yes" >&2
+}
+
+show_status()
+{
+	require_mtd
+	for state_name_file in /sys/class/mtd/mtd*/name; do
+		[ -r "$state_name_file" ] || continue
+		read -r state_name < "$state_name_file"
+		[ "$state_name" = find-my-device-state ] || continue
+		state_dir=${state_name_file%/name}
+		state_num=${state_dir##*/mtd}
+		state_size=$(cat "$state_dir/size")
+		echo "Raw state: /dev/mtd${state_num} (${state_size} bytes, two 4 KiB A/B sectors)"
+		break
+	done
+	echo "MTD device: $MTD_DEV"
+	for item in name size erasesize writesize; do
+		[ -r "/sys/class/mtd/mtd${MTD_NUM}/$item" ] || continue
+		printf '%-10s %s\n' "$item:" "$(cat "/sys/class/mtd/mtd${MTD_NUM}/$item")"
+	done
+	if is_mounted; then
+		echo "JFFS2:     mounted at $MOUNT_POINT"
+		df -k "$MOUNT_POINT"
+	else
+		echo "JFFS2:     not mounted"
+	fi
+}
+
+mount_volume()
+{
+	require_mtd
+	mkdir -p "$MOUNT_POINT"
+	if ! is_mounted; then
+		echo "SPI-NOR: mounting JFFS2 from $MTD_SOURCE; full-flash scanning may take a while..."
+		# CONFIG_BLOCK is intentionally disabled in this minimal kernel. The
+		# MTD filesystem API therefore accepts mtdN or mtd:<partition-name>,
+		# while the legacy /dev/mtdblockN compatibility path is unavailable.
+		if ! mount -t jffs2 "$MTD_SOURCE" "$MOUNT_POINT"; then
+			echo "SPI-NOR: JFFS2 mount failed; persistent volume is unavailable." >&2
+			suggest_format
+			return 1
+		fi
+	fi
+	echo "SPI-NOR: JFFS2 mount succeeded at $MOUNT_POINT."
+}
+
+auto_mount_volume()
+{
+	mkdir -p /var/run
+	echo "SPI-NOR: boot-time detection and synchronous mount started."
+	echo checking > "$BOOT_STATUS"
+	if ! wait_for_mtd; then
+		echo "SPI-NOR MTD partition '$MTD_NAME' was not detected during boot." >&2
+		echo "Check the wiring and that the SPI-NOR DTB was flashed." >&2
+		echo "SPI-NOR: boot-time mount failed; boot will continue without this volume." >&2
+		echo missing > "$BOOT_STATUS"
+		return 1
+	fi
+	if mount_volume; then
+		echo "SPI-NOR: boot-time mount completed successfully."
+		echo mounted > "$BOOT_STATUS"
+		return 0
+	fi
+	echo "SPI-NOR: boot-time mount failed; boot will continue without this volume." >&2
+	echo unavailable > "$BOOT_STATUS"
+	return 1
+}
+
+format_volume()
+{
+	[ "${1:-}" = "--yes" ] || {
+		echo "This erases the complete '$MTD_NAME' partition." >&2
+		echo "Repeat with: spinor-jffs2 format --yes" >&2
+		exit 2
+	}
+	require_mtd
+	if is_mounted; then
+		umount "$MOUNT_POINT"
+	fi
+	echo "Erasing $MTD_DEV and writing JFFS2 clean markers..."
+	flash_eraseall -j "$MTD_DEV"
+	mount_volume
+}
+
+case "${1:-status}" in
+	status)
+		show_status
+		;;
+	mount)
+		mount_volume
+		;;
+	auto)
+		auto_mount_volume
+		;;
+	format)
+		format_volume "${2:-}"
+		;;
+	unmount)
+		if is_mounted; then
+			umount "$MOUNT_POINT"
+		fi
+		;;
+	*)
+		echo "Usage: spinor-jffs2 {status|mount|auto|format --yes|unmount}" >&2
+		exit 2
+		;;
+esac

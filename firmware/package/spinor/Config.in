@@ -1,0 +1,65 @@
+config BR2_PACKAGE_SPINOR
+	bool "W25Q128FV SPI-NOR: JFFS2 data volume"
+	depends on !BR2_PACKAGE_FIND_MY_DEVICE_FRAM_SELECTED
+	help
+	  Enable a Winbond W25Q128FV on SPI5. Its first two 4 KiB erase sectors
+	  are permanently reserved for raw A/B Find My Device records, and the
+	  remaining 16,376 KiB is exposed as a JFFS2 data volume. The package
+	  applies the required
+	  Linux and BusyBox configuration fragments, builds a dedicated DTB,
+	  and installs the spinor-jffs2 setup/status helper.
+
+	  SPI5 clock and data are shared with the onboard gyroscope, LCD
+	  controller, W5500, and optional SPI-NAND. SPI-NOR uses its own PG2
+	  chip select. The SD card remains isolated on SPI4. NOR is never
+	  erased or formatted automatically. Run "spinor-jffs2 format --yes"
+	  once after checking the wiring.
+
+	  See package/spinor/README.md for wiring and first-use instructions.
+
+if BR2_PACKAGE_SPINOR
+
+menu "W25Q128FV SPI-NOR options"
+
+config BR2_PACKAGE_SPINOR_COMPRESS_INITRAMFS
+	bool "Compress the initramfs with gzip"
+	default y
+	help
+	  Store the embedded root filesystem as a gzip-compressed archive in
+	  internal flash. Linux expands it into RAM during boot; the kernel
+	  remains an XIP image and continues executing directly from flash.
+
+	  SPI-NOR support adds MTD, JFFS2, and management utilities, so
+	  compression is enabled by default to help the final xipImage stay
+	  below the STM32F429 project's 2,048,000-byte limit.
+
+config BR2_PACKAGE_SPINOR_AUTOMOUNT
+	bool "Mount an initialized JFFS2 volume automatically at boot"
+	default y
+	help
+	  Probe the W25Q128FV during boot and mount its JFFS2 data partition at
+	  /mnt/spinor. Existing data is never erased.
+
+	  When the NOR is detected but has no usable JFFS2 filesystem, boot
+	  prints the explicit one-time initialization command:
+	  "spinor-jffs2 format --yes". Formatting remains a manual destructive
+	  action and is never performed by this option.
+
+config BR2_PACKAGE_SPINOR_SUMMARY
+	bool "Enable JFFS2 summary nodes for faster mounts"
+	default n
+	help
+	  Enable CONFIG_JFFS2_SUMMARY. Summary nodes compact each eraseblock's
+	  node index so later mounts can scan less metadata. Existing JFFS2
+	  filesystems remain compatible; summaries are added as blocks are
+	  written or garbage-collected.
+
+	  This adds some kernel code and on-flash metadata. Keep it disabled
+	  when minimum internal-flash image size matters more than mount time.
+
+endmenu
+
+endif
+
+comment "W25Q128FV SPI-NOR is unavailable with Find My Device CY15B256Q FRAM (shared PG2 chip select)"
+	depends on BR2_PACKAGE_FIND_MY_DEVICE_FRAM_SELECTED

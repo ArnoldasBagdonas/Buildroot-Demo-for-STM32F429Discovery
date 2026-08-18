@@ -4,7 +4,7 @@ CPPFLAGS ?=
 
 SOURCE_DIR := ../src
 COMMON_FLAGS := $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -Werror -I$(SOURCE_DIR)
-TESTS := device_info_test oauth_service_test mdns_codec_test
+TESTS := device_info_test oauth_service_test mdns_codec_test fram_state_test spinor_state_test
 
 .PHONY: all check integration clean
 
@@ -19,10 +19,18 @@ oauth_service_test: oauth_service_test.c $(SOURCE_DIR)/oauth_service.c
 mdns_codec_test: mdns_codec_test.c $(SOURCE_DIR)/mdns_codec.c
 	$(CC) $(COMMON_FLAGS) -o $@ $^
 
+fram_state_test: fram_state_test.c $(SOURCE_DIR)/fram_state.c
+	$(CC) $(COMMON_FLAGS) -o $@ $^
+
+spinor_state_test: spinor_state_test.c $(SOURCE_DIR)/spinor_state.c
+	$(CC) $(COMMON_FLAGS) -DSPINOR_STATE_TEST -o $@ $^
+
 check: all
 	./device_info_test
 	./oauth_service_test
 	./mdns_codec_test
+	./fram_state_test
+	./spinor_state_test
 
 integration:
 	@set -eu; \

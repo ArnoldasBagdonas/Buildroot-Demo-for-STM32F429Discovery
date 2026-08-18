@@ -4,7 +4,8 @@ CPPFLAGS ?=
 LDFLAGS ?=
 
 TARGET := find-my-device
-SOURCES := find_my_device.c device_info.c oauth_service.c mdns_codec.c
+STATE_SOURCES ?=
+SOURCES := find_my_device.c device_info.c oauth_service.c mdns_codec.c $(STATE_SOURCES)
 OBJECTS := $(SOURCES:.c=.o)
 
 .PHONY: all clean
@@ -18,4 +19,4 @@ $(TARGET): $(OBJECTS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -Wall -Wextra -c -o $@ $<
 
 clean:
-	rm -f $(TARGET) $(OBJECTS)
+	rm -f $(TARGET) $(OBJECTS) fram_state.o spinor_state.o

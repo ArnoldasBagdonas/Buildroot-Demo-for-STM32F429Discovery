@@ -17,12 +17,11 @@ The standalone SPI-NAND image removes the unused network stack to conserve the
 STM32F429's 2 MiB internal XIP flash. When Find My Device is also selected, its
 IPv4/W5500 fragment is reapplied and the combined `-w5500-spinand.dtb` is
 built. The SPI-NAND gzip-initramfs option is enabled by default for that
-size-heavy composition; still verify the final image against the size check
-below.
-Standalone SD card and Gallery's built-in SD support remain excluded by
-Kconfig for image size, not wiring. Display, embedded-image Gallery, and USB
-serial have no pin conflict with this wiring, but every resulting image must
-independently pass the size check.
+size-heavy composition; `make flash` still verifies every resulting image.
+Standalone SD, Gallery SD support, Display, and USB serial have no pin conflict
+with this wiring and are not excluded merely because a combination may be too
+large. The flash command reports the actual size and refuses only the built
+image that exceeds the internal-flash limit.
 
 ## Capacity used by this image
 
@@ -71,29 +70,32 @@ with the module's own pinout; breakout-board pin order is not standardized.
 ## Hardware compatibility
 
 SPI-NAND shares SPI5 clock and data with the onboard gyroscope, LCD controller,
-and optional W5500. Their active-low chip selects are PC1 (`reg = <0>`), PC2
-(`reg = <1>`), PD5 (`reg = <2>`), and PG3 (`reg = <3>`) respectively. PG3 is
-free I/O on P2 pin 61 and is not used by the current examples. The SD card is
-the only device on SPI4, so a non-tristating SD adapter cannot interfere with
-SPI-NAND or W5500 MISO.
+optional W5500, and either CY15B256Q FRAM or W25Q128FV SPI-NOR. Their active-low
+chip selects are PC1 (`reg = <0>`), PC2 (`reg = <1>`), PD5 (`reg = <2>`), PG3
+(`reg = <3>`), and PG2 (`reg = <4>`) respectively. PG3 is free I/O on P2 pin
+61 and is not used by the other examples. The SD card is the only device on
+SPI4, so a non-tristating SD adapter cannot interfere with SPI-NAND, W5500, or
+FRAM/SPI-NOR MISO.
 
 The Linux SPI core serializes SPI5 messages, changes the clock for each device,
 and prevents simultaneous chip selection. A NAND erase/program or read can
 delay W5500 servicing, while heavy Ethernet traffic can reduce NAND throughput.
 The LCD primarily uses SPI5 for controller setup; framebuffer pixels travel
-through LTDC. Current configured maxima are 10 MHz for NAND, 4 MHz for SD, and
-1 MHz for W5500.
+through LTDC. Current configured maxima are 10 MHz for NAND and FRAM/SPI-NOR, 4 MHz for
+SD, and 1 MHz for W5500.
 
 | Feature | SPI-NAND coexistence | Pins |
 |---------|----------------------|------|
 | W5500 | Yes when the image fits | SPI5 shared, NAND CS PG3, W5500 CS PD5 and IRQ PE3 |
-| SD card | Yes in hardware; unavailable in Kconfig because of image size | Separate SPI4 PE2/PE5/PE6, SD CS PE4 |
+| CY15B256Q FRAM | Yes with Find My Device | SPI5 shared, FRAM CS PG2, NAND CS PG3 |
+| W25Q128FV SPI-NOR | Yes; alternative to FRAM | SPI5 shared, NOR CS PG2, NAND CS PG3 |
+| SD card | Yes | Separate SPI4 PE2/PE5/PE6, SD CS PE4 |
 | USB CDC | Yes | PB12/PB14/PB15 |
 | SPI5 gyroscope | Yes | SPI5 shared; gyro CS PC1 |
 | I²C3 | Yes | PA8/PC9 |
 | PWM | Yes | PB4 |
 | USART1/UART5 | Yes | PA9/PA10 and PC12/PD2 |
-| LCD display / Gallery | Yes | LTDC; LCD, NAND, and W5500 share SPI5 with separate CS lines |
+| LCD display / Gallery | Yes | LTDC; LCD, NAND, W5500, and FRAM/NOR share SPI5 with separate CS lines |
 | DCMI | Yes with SPI-NAND alone | DCMI does not use PF7/PF8/PF9/PG3 |
 | Internal RMII Ethernet | Pins do not conflict; networking is disabled in this image | RMII does not use PF7/PF8/PF9/PG3 |
 
@@ -141,14 +143,9 @@ test -s buildroot/output/images/stm32f429disco-custom-spinand.dtb
 If Display, Gallery, or USB serial is also selected, the prefix changes to
 match that feature but still ends in `-spinand.dtb`.
 
-The STM32 internal flash has a strict XIP kernel limit. Check it before every
-flash:
-
-```sh
-stat -c 'xipImage size: %s bytes' buildroot/output/images/xipImage
-```
-
-Do not flash if the size is greater than 2,048,000 bytes.
+The STM32 internal flash has a strict XIP kernel limit. `make flash` prints the
+actual and maximum sizes before selecting or programming a DTB, and refuses an
+image greater than 2,048,000 bytes.
 
 ## Flash and inspect the device
 
@@ -194,6 +191,13 @@ SPI-NAND was detected, but it has no usable UBI 'data' volume.
 Inspect it without changing data: spinand-ubi status
 To erase and initialize it once: spinand-ubi format --yes
 ```
+
+The helper prints when boot-time detection, UBI attachment, and UBIFS mounting
+begin, followed by an explicit success or failure. These operations are
+synchronous and complete before Find My Device starts, preventing a storage
+backend race. This minimal kernel has no block layer; SPI-NAND management uses
+the UBI character control device and mounts the native `ubi0:data` source, so
+it does not depend on `/dev/mtdblockN`.
 
 ## Boot-time performance
 

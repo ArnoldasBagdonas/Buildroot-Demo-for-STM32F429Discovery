@@ -1,7 +1,5 @@
 config BR2_PACKAGE_SPINAND
 	bool "W25N02KV SPI-NAND: 32 MiB UBIFS data volume"
-	depends on !BR2_PACKAGE_SDCARD
-	depends on !BR2_PACKAGE_GALLERY_SDCARD
 	help
 	  Enable a Winbond W25N02KV on SPI5 and expose the first 32 MiB as
 	  an UBI-managed UBIFS data volume. The package applies the required
@@ -61,9 +59,3 @@ config BR2_PACKAGE_SPINAND_FASTMAP
 endmenu
 
 endif
-
-comment "W25N02KV SPI-NAND is unavailable with SD card (storage image size)"
-	depends on BR2_PACKAGE_SDCARD
-
-comment "W25N02KV SPI-NAND is unavailable with Gallery SD support (storage image size)"
-	depends on BR2_PACKAGE_GALLERY_SDCARD
