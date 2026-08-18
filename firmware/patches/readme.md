@@ -9,6 +9,38 @@ after each general image passes its size and boot checks.
 Run every build command inside the project devcontainer, with `/workspace` as
 the working directory. Use the host only for the serial console.
 
+## Rebuild after changing a kernel patch
+
+Buildroot applies kernel patches only while preparing a newly extracted kernel
+source tree. After adding, removing, renaming, reordering, or editing a file in
+`firmware/board/stm32f429disco/linux-patches/linux-<version>/`, remove the
+existing kernel build directory before rebuilding:
+
+```sh
+cd /workspace
+make linux-dirclean
+make build_all
+```
+
+Use the following sequence when the patch application itself should be checked
+separately from compilation:
+
+```sh
+cd /workspace
+make linux-dirclean
+make -C buildroot BR2_EXTERNAL=/workspace/firmware linux-patch V=1
+make build_all
+```
+
+Inspect the `linux-patch` output for failed or rejected hunks. After it
+succeeds, `make build_all` continues from the patched source tree and completes
+the normal build.
+
+Do not use `make linux-rebuild` for this purpose. It recompiles the existing
+kernel source tree but does not extract a clean tree and reapply the modified
+patch series. A full project `make distclean` is also unnecessary when only a
+kernel patch changed.
+
 ## Flash layout and mandatory size limit
 
 The XIP kernel occupies the remainder of the STM32F429's 2 MiB internal flash:
