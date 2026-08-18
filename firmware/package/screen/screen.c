@@ -34,6 +34,12 @@
 #define MAX_ROWS 32
 #define CELL_W 8
 #define CELL_H 8
+#define KEY_SMALL_GLYPH_W 6
+#define KEY_SMALL_GLYPH_H 8
+#define KEY_SMALL_ADVANCE 7
+#define KEY_LARGE_GLYPH_W 10
+#define KEY_LARGE_GLYPH_H 14
+#define KEY_LARGE_ADVANCE 11
 #define WAIT_SECONDS 60
 
 static const char pid_path[] = "/run/screen.pid";
@@ -711,14 +717,40 @@ static void draw_centered_text(struct framebuffer *fb, const char *text,
 			       int x, int y, int width, int height,
 			       uint32_t foreground, uint32_t background)
 {
-	int text_width = (int)strlen(text) * 6;
+	size_t text_length = strlen(text);
+
+	if (!text_length)
+		return;
+
+	bool large = text_length == 1;
+	int glyph_width = large ? KEY_LARGE_GLYPH_W : KEY_SMALL_GLYPH_W;
+	int glyph_height = large ? KEY_LARGE_GLYPH_H : KEY_SMALL_GLYPH_H;
+	int advance = large ? KEY_LARGE_ADVANCE : KEY_SMALL_ADVANCE;
+	int text_width = (int)(text_length - 1) * advance + glyph_width;
 	int position_x = x + (width - text_width) / 2;
-	int position_y = y + (height - CELL_H) / 2;
+	int position_y = y + (height - glyph_height) / 2;
 
 	while (*text) {
-		draw_glyph(fb, position_x, position_y, (unsigned char)*text,
-			   foreground, background);
-		position_x += 6;
+		const unsigned char *glyph;
+		unsigned char character = (unsigned char)*text;
+		int column;
+		int row;
+
+		if (character < 32 || character > 127)
+			character = '?';
+		glyph = font5x7[character - 32];
+		for (column = 0; column < glyph_width; ++column) {
+			int source_column = column * 5 / glyph_width;
+
+			for (row = 0; row < glyph_height; ++row) {
+				int source_row = row * 7 / glyph_height;
+				uint32_t color = glyph[source_column] & (1U << source_row) ?
+					foreground : background;
+
+				put_pixel(fb, position_x + column, position_y + row, color);
+			}
+		}
+		position_x += advance;
 		++text;
 	}
 }

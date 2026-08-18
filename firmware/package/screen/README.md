@@ -37,7 +37,10 @@ The terminal handles printable ASCII, CR, LF, Backspace, four-column tabs,
 and the common BusyBox ANSI CSI operations for cursor movement, cursor
 position, erase-line, erase-display, saved position, and basic colors. The
 keyboard provides lowercase letters, latched Shift/uppercase, digits, shifted
-shell punctuation, Space, Enter, Backspace, Tab, and Ctrl-C.
+shell punctuation, Space, Enter, Backspace, Tab, and Ctrl-C. Single-character
+keycaps use a crisp 10x14 two-times rendering for readability; longer action
+labels use a compact 6x8 rendering. This does not change the 5x7 console cells
+or the 30-column terminal layout.
 
 Screen creates one UNIX98 pseudo-terminal and runs `/bin/sh -i` on its slave.
 The PTY is genuinely needed: its line discipline supplies echo, canonical
