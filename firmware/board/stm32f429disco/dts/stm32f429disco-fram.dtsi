@@ -1,0 +1,17 @@
+/* Cypress CY15B256Q on shared SPI5, using PC11 (P1 pin 42) as CS5. */
+
+&spi5 {
+	/* CS0 gyro; CS1 LCD; CS2 W5500; CS3 NAND; CS4 NOR; CS5 FRAM. */
+	cs-gpios = <&gpioc 1 GPIO_ACTIVE_LOW>,
+		     <&gpioc 2 GPIO_ACTIVE_LOW>,
+		     <&gpiod 5 GPIO_ACTIVE_LOW>,
+		     <&gpiog 3 GPIO_ACTIVE_LOW>,
+		     <&gpiog 2 GPIO_ACTIVE_LOW>,
+		     <&gpioc 11 GPIO_ACTIVE_LOW>;
+
+	fram: fram@5 {
+		compatible = "cypress,fm25", "atmel,at25";
+		reg = <5>;
+		spi-max-frequency = <10000000>;
+	};
+};

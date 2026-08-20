@@ -1,0 +1,9 @@
+/* Common hardware description for every example package. */
+#include "stm32f429disco-screen.dts"
+#include "stm32f429disco-usb-cdc.dtsi"
+#include "stm32f429disco-find-me.dtsi"
+#include "stm32f429disco-find-me-eeprom.dtsi"
+#include "stm32f429disco-spinand.dtsi"
+#include "stm32f429disco-sdcard.dtsi"
+#include "stm32f429disco-spinor.dtsi"
+#include "stm32f429disco-fram.dtsi"

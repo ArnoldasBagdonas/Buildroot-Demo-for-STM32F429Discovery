@@ -1,0 +1,4 @@
+config BR2_PACKAGE_HELLO_C
+	bool "hello-c"
+	help
+	  Build the C Makefile and configuration-file teaching project.

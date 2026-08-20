@@ -1,0 +1,9 @@
+#!/bin/sh
+
+case "${1:-}" in
+	start) /usr/sbin/spinor-jffs2 auto ;;
+	stop) /usr/sbin/spinor-jffs2 unmount ;;
+	restart) /usr/sbin/spinor-jffs2 unmount; /usr/sbin/spinor-jffs2 auto ;;
+	status) /usr/sbin/spinor-jffs2 status ;;
+	*) echo "Usage: $0 {start|stop|restart|status}" >&2; exit 2 ;;
+esac

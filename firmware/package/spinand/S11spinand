@@ -1,0 +1,9 @@
+#!/bin/sh
+
+case "${1:-}" in
+	start) /usr/sbin/spinand-ubi auto ;;
+	stop) /usr/sbin/spinand-ubi unmount ;;
+	restart) /usr/sbin/spinand-ubi unmount; /usr/sbin/spinand-ubi auto ;;
+	status) /usr/sbin/spinand-ubi status ;;
+	*) echo "Usage: $0 {start|stop|restart|status}" >&2; exit 2 ;;
+esac

@@ -1,2 +1,0 @@
-#include "stm32f429disco-custom.dts"
-#include "stm32f429disco-usbserialdevice-selected.dtsi"

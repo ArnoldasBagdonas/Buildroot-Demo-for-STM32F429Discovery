@@ -1,0 +1,79 @@
+config BR2_PACKAGE_HWTOOLS
+	bool "Hardware tools"
+	help
+	  Build a BusyBox-style multicall executable containing selected
+	  STM32F429Discovery hardware examples. Each selected applet is also
+	  installed under its own descriptive command name.
+
+if BR2_PACKAGE_HWTOOLS
+
+menu "Hardware tools"
+
+config BR2_PACKAGE_HWTOOLS_GPIO_LED
+	bool "gpio-led"
+	help
+	  Interactively control the red PG14 LED through the Linux GPIO
+	  character-device v2 API.
+
+config BR2_PACKAGE_HWTOOLS_BUTTON_LED
+	bool "button-led"
+	help
+	  Mirror the PA0 user-button state to the green PG13 LED using the
+	  Linux GPIO character-device v2 API.
+
+config BR2_PACKAGE_HWTOOLS_BOOT_BUTTON
+	bool "boot-button"
+	help
+	  Report whether the PA0 user button was pressed when AFBOOT started.
+	  The bootloader passes the sampled state to Linux in the device tree's
+	  /chosen node.
+
+config BR2_PACKAGE_HWTOOLS_ADC_READ
+	bool "adc-read"
+	help
+	  Read the STM32 ADC1 channel 13 input on PC3, exposed at P2 pin 13,
+	  through the Linux IIO sysfs interface.
+
+config BR2_PACKAGE_HWTOOLS_I2C_SCAN
+	bool "i2c-scan"
+	select BR2_PACKAGE_PERIPHERY
+	help
+	  Scan /dev/i2c-0 for responding 7-bit I2C devices using c-periphery.
+
+config BR2_PACKAGE_HWTOOLS_SPI_GYRO
+	bool "spi-gyro"
+	select BR2_PACKAGE_PERIPHERY
+	help
+	  Read the onboard I3G4250D gyroscope and temperature sensor over SPI.
+
+config BR2_PACKAGE_HWTOOLS_RCC_CLOCK
+	bool "rcc-clock"
+	select BR2_PACKAGE_PERIPHERY
+	help
+	  Read STM32 RCC registers through /dev/mem and report clock settings.
+
+config BR2_PACKAGE_HWTOOLS_PWM_LED
+	bool "pwm-led"
+	select BR2_PACKAGE_PERIPHERY
+	help
+	  Interactively control a LED on TIM3_CH1/PB4 through Linux PWM sysfs.
+
+config BR2_PACKAGE_HWTOOLS_UART_SEND
+	bool "uart-send"
+	select BR2_PACKAGE_PERIPHERY
+	help
+	  Send text interactively through UART5, defaulting to /dev/ttySTM1.
+
+config BR2_PACKAGE_HWTOOLS_RS485_CHAT
+	bool "rs485-chat"
+	help
+	  Exercise Linux UART RS-485 mode, defaulting to /dev/ttySTM1.
+
+config BR2_PACKAGE_HWTOOLS_TIMERS
+	bool "timers"
+	help
+	  Run timer, sleep, polling, system-clock, and RTC diagnostics.
+
+endmenu
+
+endif

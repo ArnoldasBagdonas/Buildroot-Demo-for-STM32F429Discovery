@@ -41,54 +41,6 @@ fi
 #   -c "reset run" \
 #   -c "shutdown"
 
-CONFIG_FILE=${OUTPUT_DIR}/../.config
-if [ -f "${OUTPUT_DIR}/.config" ]; then
-  # Also support a Buildroot out-of-tree output directory.
-  CONFIG_FILE=${OUTPUT_DIR}/.config
-fi
-DISPLAY_ENABLED=false
-USBSERIALDEVICE_ENABLED=false
-FIND_MY_DEVICE_ENABLED=false
-SPINAND_ENABLED=false
-SPINOR_ENABLED=false
-SDCARD_ENABLED=false
-if [ -f "${CONFIG_FILE}" ] && \
-   grep -q '^BR2_PACKAGE_DISPLAY=y$' "${CONFIG_FILE}"; then
-  DISPLAY_ENABLED=true
-fi
-if [ -f "${CONFIG_FILE}" ] && \
-   grep -q '^BR2_PACKAGE_GALLERY=y$' "${CONFIG_FILE}"; then
-  DISPLAY_ENABLED=true
-fi
-if [ -f "${CONFIG_FILE}" ] && \
-   grep -q '^BR2_PACKAGE_FIRMWARE_SCREEN=y$' "${CONFIG_FILE}"; then
-  DISPLAY_ENABLED=true
-fi
-if [ -f "${CONFIG_FILE}" ] && \
-   grep -q '^BR2_PACKAGE_GALLERY_SDCARD=y$' "${CONFIG_FILE}"; then
-  SDCARD_ENABLED=true
-fi
-if [ -f "${CONFIG_FILE}" ] && \
-   grep -q '^BR2_PACKAGE_USBSERIALDEVICE=y$' "${CONFIG_FILE}"; then
-  USBSERIALDEVICE_ENABLED=true
-fi
-if [ -f "${CONFIG_FILE}" ] && \
-   grep -q '^BR2_PACKAGE_FIND_MY_DEVICE=y$' "${CONFIG_FILE}"; then
-  FIND_MY_DEVICE_ENABLED=true
-fi
-if [ -f "${CONFIG_FILE}" ] && \
-   grep -q '^BR2_PACKAGE_SPINAND=y$' "${CONFIG_FILE}"; then
-  SPINAND_ENABLED=true
-fi
-if [ -f "${CONFIG_FILE}" ] && \
-   grep -q '^BR2_PACKAGE_SPINOR=y$' "${CONFIG_FILE}"; then
-  SPINOR_ENABLED=true
-fi
-if [ -f "${CONFIG_FILE}" ] && \
-   grep -q '^BR2_PACKAGE_SDCARD=y$' "${CONFIG_FILE}"; then
-  SDCARD_ENABLED=true
-fi
-
 XIP_FILE=${OUTPUT_DIR}/images/xipImage
 if [ ! -f "${XIP_FILE}" ]; then
   echo "ERROR: XIP image does not exist: ${XIP_FILE}" >&2
@@ -97,40 +49,7 @@ if [ ! -f "${XIP_FILE}" ]; then
 fi
 XIP_SIZE=$(stat -c %s "${XIP_FILE}")
 
-if ${USBSERIALDEVICE_ENABLED} && ${DISPLAY_ENABLED}; then
-  DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-usbserialdevice-display.dtb
-elif ${USBSERIALDEVICE_ENABLED}; then
-  DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-usbserialdevice.dtb
-elif ${DISPLAY_ENABLED}; then
-  DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-display.dtb
-else
-  DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-custom.dtb
-fi
-
-if ${FIND_MY_DEVICE_ENABLED}; then
-  DTB_FILE=${DTB_FILE%.dtb}-w5500.dtb
-fi
-
-if ${FIND_MY_DEVICE_ENABLED}; then
-  # Find My Device's generated composition include carries SPI-NOR, while
-  # its existing suffix continues to identify SPI-NAND or SD-card wiring.
-  if ${SPINAND_ENABLED}; then
-    DTB_FILE=${DTB_FILE%.dtb}-spinand.dtb
-  fi
-  if ${SDCARD_ENABLED}; then
-    DTB_FILE=${DTB_FILE%.dtb}-sdcard.dtb
-  fi
-elif ${SPINOR_ENABLED}; then
-  # The -spinor DTB composition also includes selected SPI-NAND or SD wiring.
-  DTB_FILE=${DTB_FILE%.dtb}-spinor.dtb
-else
-  if ${SPINAND_ENABLED}; then
-    DTB_FILE=${DTB_FILE%.dtb}-spinand.dtb
-  fi
-  if ${SDCARD_ENABLED}; then
-    DTB_FILE=${DTB_FILE%.dtb}-sdcard.dtb
-  fi
-fi
+DTB_FILE=${OUTPUT_DIR}/images/stm32f429disco-unified.dtb
 
 if [ ! -f "${DTB_FILE}" ]; then
   echo "ERROR: selected DTB does not exist: ${DTB_FILE}" >&2

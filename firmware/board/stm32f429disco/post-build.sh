@@ -2,10 +2,12 @@
 
 set -eu
 
-# The production-minimal image uses a direct console shell and has no network,
-# init scripts, package metadata, or diagnostic databases. Buildroot's device
-# table still requires the minimal account files while creating the initramfs.
-rm -rf "${TARGET_DIR}/etc/init.d" "${TARGET_DIR}/etc/profile.d"
+# The production-minimal image uses a direct console shell and has no package
+# metadata or diagnostic databases. Optional packages own the small ordered
+# service scripts under /etc/init.d, so preserve that directory for /init.
+# Buildroot's device table still requires the minimal account files while
+# creating the initramfs.
+rm -rf "${TARGET_DIR}/etc/profile.d"
 rm -f \
 	"${TARGET_DIR}/etc/group" \
 	"${TARGET_DIR}/etc/hostname" \

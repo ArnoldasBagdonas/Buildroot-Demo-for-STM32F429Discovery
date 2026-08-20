@@ -1,0 +1,41 @@
+/* W5500 on shared SPI5: PF7=SCK, PF8=MISO, PF9=MOSI. */
+
+&spi5_pins {
+	pins1 {
+		slew-rate = <2>;
+	};
+
+	pins2 {
+		bias-pull-up;
+	};
+};
+
+&pinctrl {
+	w5500_irq_pin: w5500-irq-0 {
+		pins {
+			pinmux = <STM32_PINMUX('E', 3, GPIO)>;
+			bias-pull-up;
+		};
+	};
+};
+
+&spi5 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi5_pins>;
+	/* CS0: gyroscope; CS1: LCD; CS2: W5500; CS3: SPI-NAND. */
+	cs-gpios = <&gpioc 1 GPIO_ACTIVE_LOW>,
+		     <&gpioc 2 GPIO_ACTIVE_LOW>,
+		     <&gpiod 5 GPIO_ACTIVE_LOW>,
+		     <&gpiog 3 GPIO_ACTIVE_LOW>;
+
+	w5500: ethernet@2 {
+		compatible = "wiznet,w5500";
+		reg = <2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&w5500_irq_pin>;
+		interrupt-parent = <&gpioe>;
+		interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
+		spi-max-frequency = <1000000>;
+	};
+};

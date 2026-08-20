@@ -1,0 +1,7 @@
+#include "stm32f429disco-networking-w5500.dtsi"
+
+&romem {
+	stm32_uid: unique-id@210 {
+		reg = <0x210 0xc>;
+	};
+};

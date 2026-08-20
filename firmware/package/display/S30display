@@ -1,0 +1,57 @@
+#!/bin/sh
+
+DAEMON=/usr/bin/display-auto
+PIDFILE=/run/display-auto.pid
+
+is_running()
+{
+	start-stop-daemon -K -t -q -p "$PIDFILE"
+}
+
+start()
+{
+	delay=${1:-3}
+	printf 'Starting display: '
+	if is_running; then
+		echo 'already running'
+		return 0
+	fi
+	rm -f "$PIDFILE"
+	if start-stop-daemon -S -q -b -m -p "$PIDFILE" -x "$DAEMON" -- run "$delay"; then
+		echo 'OK'
+	else
+		echo 'FAIL'
+		return 1
+	fi
+}
+
+stop()
+{
+	printf 'Stopping display: '
+	if ! is_running; then
+		rm -f "$PIDFILE"
+		echo 'not running'
+		return 0
+	fi
+	start-stop-daemon -K -q -p "$PIDFILE"
+	rm -f "$PIDFILE"
+	echo 'OK'
+}
+
+status()
+{
+	if is_running; then
+		echo "display: running (PID $(cat "$PIDFILE"))"
+		return 0
+	fi
+	echo 'display: stopped'
+	return 1
+}
+
+case "${1:-}" in
+	start) start "${2:-3}" ;;
+	stop) stop ;;
+	restart) stop; start "${2:-3}" ;;
+	status) status ;;
+	*) echo "Usage: $0 {start [delay]|stop|restart [delay]|status}" >&2; exit 2 ;;
+esac

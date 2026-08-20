@@ -127,7 +127,7 @@ rebuild_all: buildroot
 	$(ECHO) "==> Building system from a clean output tree..."; \
 	$(MAKE_BR); \
 	test -s "$(BUILDROOT_DIR)/output/images/xipImage"; \
-	test -s "$(BUILDROOT_DIR)/output/images/stm32f429disco-custom.dtb"; \
+	test -s "$(BUILDROOT_DIR)/output/images/stm32f429disco-unified.dtb"; \
 	SDK_HASH_AFTER=$$(sha256sum "$(SDK_ARCHIVE)" | cut -d' ' -f1); \
 	if [ "$$SDK_HASH_BEFORE" != "$$SDK_HASH_AFTER" ]; then \
 		$(ECHO) "✖ SDK archive changed during the system rebuild." >&2; \
@@ -270,9 +270,9 @@ linux-rebuild:
 	@$(MAKE_BR) linux-rebuild
 
 dtb-clean:
-	@$(ECHO) "==> Deleting custom device tree..."
-	@$(RM_F) $(BUILDROOT_DIR)/output/images/stm32f429disco-custom.dtb
-	@$(ECHO) "   ✔ Custom device tree delete complete."
+	@$(ECHO) "==> Deleting unified device tree..."
+	@$(RM_F) $(BUILDROOT_DIR)/output/images/stm32f429disco-unified.dtb
+	@$(ECHO) "   ✔ Unified device tree delete complete."
 
 dtb-rebuild: dtb-clean linux-rebuild build_all
 
@@ -298,22 +298,13 @@ rootfs-rebuild: rootfs-clean
 	}
 
 # -------------------------------------------------------------
-# Custom target: Always rebuild ioexample1
+# Custom target: Always rebuild hardware tools
 # -------------------------------------------------------------
-.PHONY: ioexample1-rebuild
-ioexample1-rebuild:
-	@echo "⚠ Forcing rebuild of ioexample1"
-	$(MAKE_BR) ioexample1-dirclean
-	$(MAKE_BR) ioexample1
-
-# -------------------------------------------------------------
-# Custom target: Always rebuild ioexample2
-# -------------------------------------------------------------
-.PHONY: ioexample2-rebuild
-ioexample2-rebuild:
-	@echo "⚠ Forcing rebuild of ioexample2"
-	$(MAKE_BR) ioexample2-dirclean
-	$(MAKE_BR) ioexample2
+.PHONY: hwtools-rebuild
+hwtools-rebuild:
+	@echo "⚠ Forcing rebuild of hwtools"
+	$(MAKE_BR) hwtools-dirclean
+	$(MAKE_BR) hwtools
 
 # -------------------------------------------------------------
 # Catch-all: forward unknown targets to Buildroot

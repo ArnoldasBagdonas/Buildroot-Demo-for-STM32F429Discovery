@@ -17,12 +17,21 @@ if BR2_PACKAGE_FIRMWARE_SCREEN
 
 menu "Screen options"
 
+config BR2_PACKAGE_FIRMWARE_SCREEN_COMPRESS_INITRAMFS
+	bool "Compress the initramfs with gzip (NEW)"
+	default y
+	help
+	  Store the embedded root filesystem as a gzip-compressed archive in
+	  internal flash. Linux expands it into RAM during boot; the kernel
+	  remains an XIP image and continues executing directly from flash.
+
 config BR2_PACKAGE_FIRMWARE_SCREEN_AUTOSTART
 	bool "Start the touch console automatically at boot"
+	default y
 	help
-	  Install the screen-auto service link. The minimal init script starts
-	  a supervisor which waits for both /dev/fb0 and the STMPE811 evdev
-	  device before launching the LCD shell.
+	  Install the package-owned /etc/init.d/S30screen service. It starts a
+	  supervisor which waits for both /dev/fb0 and the STMPE811 evdev device
+	  before launching the LCD shell.
 
 endmenu
 

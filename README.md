@@ -259,15 +259,14 @@ Inside the devcontainer, flash without `sudo`:
 make flash
 ```
 
-### W5500 Find My Device target
+### W5500 find-me target
 
-The default firmware now includes the external `find-my-device` package and a
-W5500 device tree on shared SPI5, isolated from the SPI4 SD-card bus. See the
-package's
-[wiring, build, bring-up, and debugging guide](firmware/package/find-my-device/README.md)
-before connecting the module. `make flash` automatically selects the matching
-`-w5500.dtb` for the current display and USB package combination. The UART5
-example port is enabled in every board DTB and does not conflict with either.
+Selecting the external `find-me` package enables the W5500 driver on shared
+SPI5, isolated from the SPI4 SD-card bus. See the package's
+[package summary and wiring guide](firmware/package/find-me/readme.md)
+before connecting the module. `make flash` uses the common
+`stm32f429disco-unified.dtb`. The UART5 example port is described in that tree
+and does not conflict with either bus.
 
 ### Clean build while preserving the SDK
 

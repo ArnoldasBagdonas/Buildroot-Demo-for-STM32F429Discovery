@@ -1,7 +1,5 @@
 /*
- * Touch-enabled display base owned by BR2_PACKAGE_FIRMWARE_SCREEN.
- * Screen copies this over the composed stm32f429disco-display.dts name in
- * the kernel build tree; the tracked Display/Gallery base stays unchanged.
+ * Shared LTDC panel and touch-controller description.
  */
 #include "stm32f429disco-custom.dts"
 

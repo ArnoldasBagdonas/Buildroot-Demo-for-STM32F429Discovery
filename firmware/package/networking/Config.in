@@ -1,0 +1,20 @@
+config BR2_PACKAGE_NETWORKING
+	bool "Networking"
+	help
+	  Enable the kernel and BusyBox networking stack. Select the network
+	  controller in the Networking options submenu.
+
+if BR2_PACKAGE_NETWORKING
+
+menu "Networking options"
+
+config BR2_PACKAGE_NETWORKING_W5500
+	bool "W5500 Ethernet controller"
+	default y
+	help
+	  Enable the W5500 on shared SPI5 using PD5 as chip select and PE3 as
+	  its interrupt input. The SD card remains on SPI4.
+
+endmenu
+
+endif

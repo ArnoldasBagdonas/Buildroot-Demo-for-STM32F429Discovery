@@ -14,6 +14,7 @@
 		bootargs = "root=/dev/ram";
 		//bootargs = "root=/dev/ram clocksource=arm_system_timer";
 		stdout-path = "serial0:115200n8";
+		bootloader,user-button = <0>;
 	};
 
 	memory@90000000 {
@@ -26,10 +27,36 @@
 		serial1 = &usart5;
 	};
 
+	vdda: regulator-vdda {
+		compatible = "regulator-fixed";
+		regulator-name = "vdda";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+	};
+
 };
 
 &clk_hse {
 	clock-frequency = <8000000>;
+};
+
+&adc {
+	pinctrl-names = "default";
+	pinctrl-0 = <&adc1_in13_pc3_pin>;
+	vdda-supply = <&vdda>;
+	vref-supply = <&vdda>;
+	status = "okay";
+};
+
+&adc1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	channel@13 {
+		reg = <13>; /* ADC1_IN13 on PC3, P2 pin 13 */
+	};
 };
 
 &i2c3 {
@@ -107,6 +134,12 @@
 
 /* UART5 uses free expansion-header pins and can coexist with LTDC and W5500. */
 &pinctrl {
+	adc1_in13_pc3_pin: adc1-in13-pc3 {
+		pins {
+			pinmux = <STM32_PINMUX('C', 3, ANALOG)>;
+		};
+	};
+
 	uart5_pins: uart5-0 {
 		pins1 {
 			pinmux = <STM32_PINMUX('C', 12, AF8)>; /* UART5_TX, P2 pin 44 */
@@ -127,6 +160,6 @@
 	pinctrl-names = "default";
 	status = "okay";
 
-	/* ioexample8 enables RS-485 dynamically; use free P2 pin 38 for DE. */
+	/* rs485-chat enables RS-485 dynamically; use free P2 pin 38 for DE. */
 	rts-gpios = <&gpiod 4 GPIO_ACTIVE_HIGH>;
 };

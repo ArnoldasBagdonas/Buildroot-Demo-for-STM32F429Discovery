@@ -3,16 +3,15 @@ config BR2_PACKAGE_SPINAND
 	help
 	  Enable a Winbond W25N02KV on SPI5 and expose the first 32 MiB as
 	  an UBI-managed UBIFS data volume. The package applies the required
-	  Linux and BusyBox configuration fragments, builds a dedicated DTB,
-	  and installs the spinand-ubi setup/status helper.
+	  Linux and BusyBox configuration fragments and installs the
+	  spinand-ubi setup/status helper.
 
 	  SPI5 clock and data are shared with the onboard gyroscope, LCD
 	  controller, and optional W5500. SPI-NAND uses its own PG3 chip select.
-	  The SD card remains isolated on SPI4. NAND is never erased or formatted
-	  automatically. Run
-	  "spinand-ubi format --yes" once after checking the wiring.
+	  The SD card remains isolated on SPI4. Initialize new media once with
+	  "spinand-ubi format --yes" after checking the wiring.
 
-	  See package/spinand/README.md for wiring and first-use instructions.
+	  See package/spinand/readme.md for wiring and first-use instructions.
 
 if BR2_PACKAGE_SPINAND
 
@@ -34,13 +33,13 @@ config BR2_PACKAGE_SPINAND_AUTOMOUNT
 	bool "Mount an initialized UBIFS volume automatically at boot"
 	default y
 	help
-	  Probe the W25N02KV during boot, attach its UBI partition, and mount
-	  the data volume at /mnt/spinand. Existing data is never erased.
+	  Install /etc/init.d/S11spinand. It probes the W25N02KV during boot,
+	  attaches its UBI partition, and mounts the data volume at /mnt/spinand.
 
 	  When the NAND is detected but has no usable UBI data volume, boot
-	  prints the explicit one-time initialization command:
+	  prints the one-time initialization command:
 	  "spinand-ubi format --yes". Formatting remains a manual destructive
-	  action and is never performed by this option.
+	  action.
 
 config BR2_PACKAGE_SPINAND_FASTMAP
 	bool "Use UBI fastmap checkpoints (experimental)"

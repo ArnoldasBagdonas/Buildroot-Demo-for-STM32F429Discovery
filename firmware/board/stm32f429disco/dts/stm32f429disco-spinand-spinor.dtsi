@@ -1,2 +1,0 @@
-#include "stm32f429disco-spinand.dtsi"
-#include "stm32f429disco-spinor-device.dtsi"

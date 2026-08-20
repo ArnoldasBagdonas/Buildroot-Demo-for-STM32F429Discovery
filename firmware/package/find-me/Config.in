@@ -1,0 +1,94 @@
+config BR2_PACKAGE_FIND_ME
+	bool "find-me"
+	select BR2_PACKAGE_NETWORKING
+	select BR2_PACKAGE_NETWORKING_W5500
+	help
+	  Install find-me, a Linux implementation of the FreeRTOS find-me
+	  reference target. It enables a W5500 on shared SPI5 with its own
+	  chip select, separate from the isolated SPI4 SD-card bus,
+	  obtains an IPv4 address, advertises _device-setup._tcp.local over
+	  mDNS, and serves the API v3 HTTP/OAuth/WebSocket onboarding flow.
+
+	  The device ID and locally administered MAC address are derived from
+	  the STM32 factory unique ID. Optional external confirmation-button
+	  and status-LED GPIOs avoid every pin used by the existing examples.
+
+	  Persistent state can use optional filesystem-free CY15B256Q FRAM,
+	  24LC16B I2C EEPROM, or W25Q128FV SPI-NOR storage, or a mounted
+	  standalone storage package. Runtime detection selects the first
+	  available backend and falls back safely to the RAM-backed root
+	  filesystem.
+
+if BR2_PACKAGE_FIND_ME
+
+menu "find-me options"
+
+config BR2_PACKAGE_FIND_ME_COMPRESS_INITRAMFS
+	bool "Compress the initramfs with gzip (NEW)"
+	default y
+	help
+	  Store the embedded root filesystem as a gzip-compressed archive in
+	  internal flash. Linux expands it into RAM during boot; the kernel
+	  remains an XIP image and continues executing directly from flash.
+
+config BR2_PACKAGE_FIND_ME_AUTOSTART
+	bool "Start find-me automatically at boot"
+	default y
+	help
+	  Install the package-owned find-me service and start it after persistent
+	  storage services have completed. The service supports start, stop,
+	  restart, and status operations.
+
+config BR2_PACKAGE_FIND_ME_FRAM
+	bool "Enable CY15B256Q SPI-FRAM"
+	help
+	  Enable a Cypress CY15B256Q SPI FRAM on the shared SPI5 bus. It uses
+	  PC11 (P1 pin 42) as its dedicated active-low chip select and is
+	  exposed by the Linux AT25/NVMEM driver.
+
+	  find-me stores two alternating, checksummed records in the
+	  first 512 bytes. If the FRAM is absent or fails to probe, startup
+	  continues with mounted storage packages and then RAM.
+
+config BR2_PACKAGE_FIND_ME_EEPROM
+	bool "Enable 24LC16B I2C EEPROM"
+	help
+	  Enable a Microchip 24LC16B on the existing 100 kHz I2C3 bus. Linux's
+	  at24 driver exposes its 2 KiB as byte-addressable NVMEM; no filesystem
+	  is used. find-me stores two alternating 256-byte records with
+	  generation counters, CRC32, and read-back verification.
+
+	  The EEPROM occupies I2C addresses 0x50 through 0x57. It can coexist
+	  with SPI-FRAM, SPI-NOR, and mounted storage, and find-me remains
+	  the sole writer of its reserved first 512 bytes.
+
+config BR2_PACKAGE_FIND_ME_SPINOR_STATE
+	bool "Enable W25Q128FV SPI-NOR"
+	help
+	  Enable a W25Q128FV on the shared SPI5 bus and reserve its first two
+	  4 KiB erase sectors for find-me. State is accessed directly
+	  through raw MTD, without a filesystem, and written as alternating
+	  records with generation counters, CRC32, and read-back verification.
+	  An interrupted erase or write leaves the previous sector usable.
+
+	  This option is independent of the standalone SPI-NOR package. If that
+	  package is also selected, it exposes the remaining NOR capacity as an
+	  independent JFFS2 filesystem at /mnt/spinor.
+
+config BR2_PACKAGE_FIND_ME_CONSOLE_DEBUG
+	bool "Enable console button and LED debug controls"
+	help
+	  Install find-me-debug for hardware-independent testing from
+	  the serial console. Its button command simulates one complete USER
+	  button press and its led command runs a three-flash LD3 self-test
+	  while reporting LED state changes on the console. The net command
+	  prints interface counters, and the daemon reports them every five
+	  seconds so failures can be diagnosed even when console input is not
+	  available.
+
+	  Leave this disabled in production images. The daemon's debug signal
+	  handlers and console messages are omitted when this option is off.
+
+endmenu
+
+endif

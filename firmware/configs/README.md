@@ -152,7 +152,7 @@ The second stage configures and builds the full root filesystem and Linux image 
      Kernel  --->
          (Kernel version) → 6.1.27 
          (In-tree Device Tree Source file names) → stm32f429-disco (leave as it is)
-         (Out-of-tree Device Tree Source file paths) →  /workspace/firmware/board/stm32f429disco/dts/stm32f429disco-custom.dts
+         (Out-of-tree Device Tree Source file paths) →  /workspace/firmware/board/stm32f429disco/dts/stm32f429disco-unified.dts
      ```
 
    - To enable a tracked BusyBox configuration:

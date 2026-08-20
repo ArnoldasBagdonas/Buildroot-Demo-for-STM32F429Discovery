@@ -14,10 +14,9 @@ config BR2_PACKAGE_GALLERY
 	  gallery, display, and display-pattern applet names. Its optional
 	  features add automatic startup and SD-card image support.
 
-	  By default Gallery uses only its embedded images and builds the
-	  display device tree. Optional SD-card support adds the automounter
-	  applet to the same executable and builds the combined Display +
-	  SD-card device tree.
+	  By default Gallery uses only its embedded images. Optional SD-card
+	  support adds the automounter applet and the required MMC/FAT kernel
+	  configuration to the same image.
 
 	  Selecting Gallery disables the standalone Display example. The
 	  standalone SD-card package may coexist while Gallery's built-in SD
@@ -31,18 +30,26 @@ if BR2_PACKAGE_GALLERY
 
 menu "Gallery options"
 
+config BR2_PACKAGE_GALLERY_COMPRESS_INITRAMFS
+	bool "Compress the initramfs with gzip (NEW)"
+	default y
+	help
+	  Store the embedded root filesystem as a gzip-compressed archive in
+	  internal flash. Linux expands it into RAM during boot; the kernel
+	  remains an XIP image and continues executing directly from flash.
+
 config BR2_PACKAGE_GALLERY_AUTOSTART
 	bool "Start the gallery automatically at boot"
 	default y
 	help
-	  Install display-auto and gallery-auto links. The minimal init script
-	  starts display-auto at boot.
+	  Install the package-owned /etc/init.d/S30gallery service and start the
+	  non-interactive slideshow at boot.
 
 config BR2_PACKAGE_GALLERY_SDCARD
 	bool "Build SD-card support into the Gallery executable"
 	help
-	  Link the sdcard applet into Gallery and add MMC-over-SPI/FAT support,
-	  the automount service, and the combined Display + SD-card device tree.
+	  Link the sdcard applet into Gallery and add MMC-over-SPI/FAT support
+	  and the automount service.
 	  This disables the standalone SD-card package because both packages
 	  would otherwise install /usr/sbin/sdcard.
 

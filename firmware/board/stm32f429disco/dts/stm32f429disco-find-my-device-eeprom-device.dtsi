@@ -1,9 +1,0 @@
-/* Microchip 24LC16B on the existing external I2C3 bus. */
-&i2c3 {
-	find_my_device_eeprom: eeprom@50 {
-		compatible = "microchip,24lc16", "atmel,24c16";
-		reg = <0x50>;
-		pagesize = <16>;
-		label = "find-my-device-eeprom";
-	};
-};

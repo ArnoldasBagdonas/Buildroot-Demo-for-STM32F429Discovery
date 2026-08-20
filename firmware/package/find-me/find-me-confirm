@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -e
+
+if [ ! -r /var/run/find-me.pid ]; then
+	echo "find-me is not running" >&2
+	exit 1
+fi
+
+FMD_PID=$(cat /var/run/find-me.pid)
+kill -USR1 "${FMD_PID}"
+echo "Physical confirmation signal sent to find-me (PID ${FMD_PID})."

@@ -35,7 +35,7 @@
 			#size-cells = <1>;
 
 			partition@0 {
-				label = "find-my-device-state";
+				label = "find-me-state";
 				reg = <0x00000000 0x00002000>;
 			};
 

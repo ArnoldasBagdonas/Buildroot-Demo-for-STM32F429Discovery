@@ -1,21 +1,18 @@
 config BR2_PACKAGE_SPINOR
-	bool "W25Q128FV SPI-NOR: JFFS2 data volume"
-	depends on !BR2_PACKAGE_FIND_MY_DEVICE_FRAM_SELECTED
+	bool "W25Q128FV SPI-NOR: 16,376 KiB JFFS2 data volume"
 	help
 	  Enable a Winbond W25Q128FV on SPI5. Its first two 4 KiB erase sectors
-	  are permanently reserved for raw A/B Find My Device records, and the
+	  are permanently reserved for raw A/B find-me records, and the
 	  remaining 16,376 KiB is exposed as a JFFS2 data volume. The package
-	  applies the required
-	  Linux and BusyBox configuration fragments, builds a dedicated DTB,
-	  and installs the spinor-jffs2 setup/status helper.
+	  applies the required Linux and BusyBox configuration fragments and
+	  installs the spinor-jffs2 setup/status helper.
 
 	  SPI5 clock and data are shared with the onboard gyroscope, LCD
 	  controller, W5500, and optional SPI-NAND. SPI-NOR uses its own PG2
-	  chip select. The SD card remains isolated on SPI4. NOR is never
-	  erased or formatted automatically. Run "spinor-jffs2 format --yes"
-	  once after checking the wiring.
+	  chip select. The SD card remains isolated on SPI4. Initialize new media
+	  once with "spinor-jffs2 format --yes" after checking the wiring.
 
-	  See package/spinor/README.md for wiring and first-use instructions.
+	  See package/spinor/readme.md for wiring and first-use instructions.
 
 if BR2_PACKAGE_SPINOR
 
@@ -37,13 +34,13 @@ config BR2_PACKAGE_SPINOR_AUTOMOUNT
 	bool "Mount an initialized JFFS2 volume automatically at boot"
 	default y
 	help
-	  Probe the W25Q128FV during boot and mount its JFFS2 data partition at
-	  /mnt/spinor. Existing data is never erased.
+	  Install /etc/init.d/S10spinor. It probes the W25Q128FV during boot and
+	  mounts its JFFS2 data partition at /mnt/spinor.
 
 	  When the NOR is detected but has no usable JFFS2 filesystem, boot
-	  prints the explicit one-time initialization command:
+	  prints the one-time initialization command:
 	  "spinor-jffs2 format --yes". Formatting remains a manual destructive
-	  action and is never performed by this option.
+	  action.
 
 config BR2_PACKAGE_SPINOR_SUMMARY
 	bool "Enable JFFS2 summary nodes for faster mounts"
@@ -60,6 +57,3 @@ config BR2_PACKAGE_SPINOR_SUMMARY
 endmenu
 
 endif
-
-comment "W25Q128FV SPI-NOR is unavailable with Find My Device CY15B256Q FRAM (shared PG2 chip select)"
-	depends on BR2_PACKAGE_FIND_MY_DEVICE_FRAM_SELECTED

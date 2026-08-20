@@ -1,2 +1,0 @@
-#include "stm32f429disco-display.dts"
-#include "stm32f429disco-sdcard.dtsi"

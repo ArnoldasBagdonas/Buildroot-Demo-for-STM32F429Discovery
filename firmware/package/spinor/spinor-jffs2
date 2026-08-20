@@ -62,7 +62,7 @@ show_status()
 	for state_name_file in /sys/class/mtd/mtd*/name; do
 		[ -r "$state_name_file" ] || continue
 		read -r state_name < "$state_name_file"
-		[ "$state_name" = find-my-device-state ] || continue
+		[ "$state_name" = find-me-state ] || continue
 		state_dir=${state_name_file%/name}
 		state_num=${state_dir##*/mtd}
 		state_size=$(cat "$state_dir/size")

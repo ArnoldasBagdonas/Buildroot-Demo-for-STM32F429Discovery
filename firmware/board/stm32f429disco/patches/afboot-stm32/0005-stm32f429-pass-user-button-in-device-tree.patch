@@ -1,0 +1,209 @@
+From 7d597c7f14d4dced12c7df18e69be478d0439112 Mon Sep 17 00:00:00 2001
+From: Buildroot Demo <buildroot-demo@example.com>
+Date: Thu, 20 Aug 2026 23:30:00 +0300
+Subject: [PATCH] stm32f429: pass user button state in device tree
+
+Sample PA0 while AFBOOT starts, copy the flash DTB to the top 32 KiB of
+external SDRAM, and update the preallocated /chosen
+bootloader,user-button property. Linux reserves the DTB during early boot and
+exposes the property through its firmware device-tree sysfs hierarchy.
+
+The copied tree avoids modifying internal flash and keeps the handoff in the
+standard ARM DTB register rather than using a private register convention.
+
+Signed-off-by: Buildroot Demo <buildroot-demo@example.com>
+---
+ start_kernel.c       |  7 ++++-
+ start_kernel.h       |  2 ++
+ stm32f429i-disco.c   | 96 +++++++++++++++++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 103 insertions(+), 2 deletions(-)
+
+diff --git a/start_kernel.c b/start_kernel.c
+index d28cd82..1eb6cae 100644
+--- a/start_kernel.c
++++ b/start_kernel.c
+@@ -1,9 +1,14 @@
+ #include <stdlib.h>
+ #include <stdint.h>
+ 
+-void start_kernel(void)
++void start_kernel_dtb(uint32_t dtb_address)
+ {
+ 	void (*kernel)(uint32_t reserved, uint32_t mach, uint32_t dt) = (void (*)(uint32_t, uint32_t, uint32_t))(KERNEL_ADDR | 1);
+ 
+-	kernel(0, ~0UL, DTB_ADDR);
++	kernel(0, ~0UL, dtb_address);
++}
++
++void start_kernel(void)
++{
++	start_kernel_dtb(DTB_ADDR);
+ }
+diff --git a/start_kernel.h b/start_kernel.h
+index 12e743d..ef9c12b 100644
+--- a/start_kernel.h
++++ b/start_kernel.h
+@@ -1,6 +1,9 @@
+ #ifndef _START_KERNEL_H
+ #define _START_KERNEL_H
+ 
++#include <stdint.h>
++
+ void start_kernel(void);
++void start_kernel_dtb(uint32_t dtb_address);
+ 
+ #endif /* _START_KERNEL_H */
+diff --git a/stm32f429i-disco.c b/stm32f429i-disco.c
+index 0d60850..35ef3f0 100644
+--- a/stm32f429i-disco.c
++++ b/stm32f429i-disco.c
+@@ -7,6 +7,15 @@
+ #include "gpio.h"
+ #include "start_kernel.h"
+ 
++#define FDT_MAGIC              0xd00dfeedUL
++#define FDT_BEGIN_NODE         0x1UL
++#define FDT_END_NODE           0x2UL
++#define FDT_PROP               0x3UL
++#define FDT_NOP                0x4UL
++#define FDT_END                0x9UL
++#define BOOT_DTB_RAM_ADDR      0x907f8000UL
++#define BOOT_DTB_MAX_SIZE      0x8000UL
++
+ #define CONFIG_HSE_HZ	8000000
+ #define CONFIG_PLL_M	8
+ #define CONFIG_PLL_N	336
+@@ -21,5 +30,104 @@ static void *usart_base = (void *)USART1_BASE;
+ static void *gpio_base = (void *)GPIOA_BASE;
+ 
++static uint32_t read_be32(const uint8_t *value)
++{
++	return ((uint32_t)value[0] << 24) | ((uint32_t)value[1] << 16) |
++	       ((uint32_t)value[2] << 8) | value[3];
++}
++
++static void write_be32(uint8_t *value, uint32_t data)
++{
++	value[0] = data >> 24;
++	value[1] = data >> 16;
++	value[2] = data >> 8;
++	value[3] = data;
++}
++
++static int fdt_string_equal(const uint8_t *strings, uint32_t strings_size,
++			    uint32_t offset, const char *wanted)
++{
++	if (offset >= strings_size)
++		return 0;
++	while (*wanted && offset < strings_size && strings[offset] == *wanted) {
++		++offset;
++		++wanted;
++	}
++	return !*wanted && offset < strings_size && strings[offset] == 0;
++}
++
++static uint32_t copy_dtb_with_button(uint32_t button_pressed)
++{
++	const uint8_t *source = (const uint8_t *)DTB_ADDR;
++	uint8_t *destination = (uint8_t *)BOOT_DTB_RAM_ADDR;
++	uint8_t *cursor;
++	uint8_t *structure_end;
++	const uint8_t *strings;
++	uint32_t structure_offset;
++	uint32_t structure_size;
++	uint32_t strings_offset;
++	uint32_t strings_size;
++	uint32_t total_size;
++	uint32_t i;
++
++	if (read_be32(source) != FDT_MAGIC)
++		return DTB_ADDR;
++	total_size = read_be32(source + 4);
++	if (total_size < 40 || total_size > BOOT_DTB_MAX_SIZE)
++		return DTB_ADDR;
++	for (i = 0; i < total_size; ++i)
++		destination[i] = source[i];
++
++	structure_offset = read_be32(destination + 8);
++	strings_offset = read_be32(destination + 12);
++	strings_size = read_be32(destination + 32);
++	structure_size = read_be32(destination + 36);
++	if (structure_offset > total_size || structure_size > total_size - structure_offset ||
++	    strings_offset > total_size || strings_size > total_size - strings_offset)
++		return BOOT_DTB_RAM_ADDR;
++
++	cursor = destination + structure_offset;
++	structure_end = cursor + structure_size;
++	strings = destination + strings_offset;
++	while (cursor + 4 <= structure_end) {
++		uint32_t token = read_be32(cursor);
++
++		cursor += 4;
++		if (token == FDT_BEGIN_NODE) {
++			while (cursor < structure_end && *cursor)
++				++cursor;
++			if (cursor >= structure_end)
++				break;
++			++cursor;
++			cursor += (4 - ((uint32_t)(cursor - destination) & 3)) & 3;
++		} else if (token == FDT_PROP) {
++			uint32_t length;
++			uint32_t name_offset;
++
++			if (cursor + 8 > structure_end)
++				break;
++			length = read_be32(cursor);
++			name_offset = read_be32(cursor + 4);
++			cursor += 8;
++			if (length > (uint32_t)(structure_end - cursor))
++				break;
++			if (length == 4 && fdt_string_equal(strings, strings_size,
++							 name_offset,
++							 "bootloader,user-button")) {
++				write_be32(cursor, button_pressed);
++				break;
++			}
++			cursor += (length + 3) & ~3UL;
++		} else if (token == FDT_END_NODE || token == FDT_NOP) {
++			continue;
++		} else if (token == FDT_END) {
++			break;
++		} else {
++			break;
++		}
++	}
++	return BOOT_DTB_RAM_ADDR;
++}
++
+ static void clock_setup(void)
+ {
+ 	volatile uint32_t *RCC_CR = (void *)(RCC_BASE + 0x00);
+@@ -106,6 +197,7 @@ int main(void)
+ 	volatile uint32_t *FMC_SDRTR = (void *)(FMC_BASE + 0x154);
+ 	volatile uint32_t *SYSCFG_MEMRMP = (void *)(SYSCFG_BASE + 0x00);
+ 	int i;
++	uint32_t button_pressed;
+ 
+ 	if (*FLASH_CR & FLASH_CR_LOCK) {
+ 		*FLASH_KEYR = 0x45670123;
+@@ -116,6 +208,9 @@ int main(void)
+ 
+ 	clock_setup();
+ 
++	gpio_set(gpio_base, 'A', 0, 0, GPIOx_MODER_MODERy_INPUT, 0,
++		 GPIOx_PUPDR_PULLDOWN);
++	button_pressed = (*(volatile uint32_t *)(GPIOA_BASE + 0x10) & 1) ? 1 : 0;
+ 	gpio_set_fmc(gpio_base, 'B', 5);
+ 	gpio_set_fmc(gpio_base, 'B', 6);
+ 	gpio_set_fmc(gpio_base, 'C', 0);
+@@ -182,7 +277,7 @@ int main(void)
+ 	usart_setup(usart_base, PLLCLK_HZ/2);
+ 	usart_putch(usart_base, '.');
+ 
+-	start_kernel();
++	start_kernel_dtb(copy_dtb_with_button(button_pressed));
+ 
+ 	return 0;
+ }
+-- 
+2.43.0

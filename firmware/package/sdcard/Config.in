@@ -4,17 +4,17 @@ config BR2_PACKAGE_SDCARD
 	help
 	  Enable a removable SD/SDHC card adapter on SPI4 and mount its first
 	  FAT16/FAT32 partition at /mnt/sdcard. The package applies the Linux
-	  and BusyBox configuration fragments, builds a dedicated -sdcard DTB,
-	  and installs the sdcard status/mount helper.
+	  and BusyBox configuration fragments and installs the sdcard
+	  status/mount helper.
 
 	  The display-safe wiring uses PE2, PE4, PE5, and PE6 on expansion
-	  header P1. Cards are never formatted by this package. It may be
-	  selected with Find My Device; the SD card stays on SPI4 while the
+	  header P1. It may be selected with find-me; the SD card stays on SPI4
+	  while the
 	  W5500 uses the separate SPI5 controller. Select Gallery and its
 	  SD-card suboption to combine the SD-card and Display applets in one
 	  executable.
 
-	  See package/sdcard/README.md for wiring and usage instructions.
+	  See package/sdcard/readme.md for wiring and usage instructions.
 
 if BR2_PACKAGE_SDCARD
 
@@ -24,10 +24,10 @@ config BR2_PACKAGE_SDCARD_AUTOMOUNT
 	bool "Mount an inserted SD card automatically at boot"
 	default y
 	help
-	  Install the sdcard-auto applet link and try to mount a card while
-	  the minimal init script starts. If periodic detection is disabled,
-	  this is a single mount attempt; a card inserted later must be mounted
-	  manually with "sdcard mount".
+	  Install the package-owned /etc/init.d/S20sdcard service and try to
+	  mount a card during boot. If periodic detection is disabled, this is a
+	  single mount attempt; a card inserted later must be mounted manually
+	  with "sdcard mount".
 
 config BR2_PACKAGE_SDCARD_AUTODETECT
 	bool "Periodically detect and automatically mount SD cards"

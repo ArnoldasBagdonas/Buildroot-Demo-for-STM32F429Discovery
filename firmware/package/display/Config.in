@@ -13,14 +13,15 @@ config BR2_PACKAGE_DISPLAY
 	  support is also available without another decoder library.
 
 	  Selecting this package also applies the required Linux DRM/fbdev
-	  configuration fragment and builds a display-enabled device tree.
-	  The flash script automatically selects that device tree.
+	  configuration fragment. The shared board device tree already describes
+	  the display hardware.
 
 	  When this package is not selected, the display drivers, fbv, image
-	  decoder libraries, display utility, sample images, and display
-	  device-tree nodes are all excluded from the firmware images.
+	  decoder libraries, display utility, and sample images are excluded from
+	  the firmware image. The device-tree nodes remain inactive because their
+	  kernel drivers are not enabled.
 
-	  The independent BR2_PACKAGE_DISPLAYDEBUG package may be selected beside
+	  The independent BR2_PACKAGE_SYSDIAG package may be selected beside
 	  this or any other example when reusable diagnostics are needed.
 
 	  Select Gallery for the BusyBox-style executable example. Its optional
@@ -36,17 +37,25 @@ if BR2_PACKAGE_DISPLAY
 
 menu "Display options"
 
+config BR2_PACKAGE_DISPLAY_COMPRESS_INITRAMFS
+	bool "Compress the initramfs with gzip (NEW)"
+	default y
+	help
+	  Store the embedded root filesystem as a gzip-compressed archive in
+	  internal flash. Linux expands it into RAM during boot; the kernel
+	  remains an XIP image and continues executing directly from flash.
+
 config BR2_PACKAGE_DISPLAY_AUTOSTART
 	bool "Start the image slideshow automatically at boot"
 	default y
 	help
-	  Install the display-auto supervisor and start it from the
-	  minimal init script. The standalone Display example always uses its
-	  bundled test images unless an explicit directory is passed to display.
+	  Install the package-owned /etc/init.d/S30display service. The
+	  standalone Display example always uses its bundled test images unless
+	  an explicit directory is passed to display.
 
 	  The viewer runs in non-interactive mode and does not consume input
-	  from the serial console. Use "display-auto status" to inspect
-	  it or "display-auto stop" before manual framebuffer testing.
+	  from the serial console. Use the service script's status or stop
+	  operation before manual framebuffer testing.
 
 endmenu
 

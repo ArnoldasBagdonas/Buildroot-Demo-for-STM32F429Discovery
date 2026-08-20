@@ -3,28 +3,9 @@ mount -t devtmpfs devtmpfs /dev
 mount -t sysfs sysfs /sys
 mount -t proc proc /proc 2>/dev/null || true
 export PATH="/bin:/sbin:/usr/bin:/usr/sbin" PS1='# '
-if [ -x /usr/sbin/spinor-jffs2-auto ]; then
-	# Resolve persistent storage before dependent services start.
-	/usr/sbin/spinor-jffs2-auto auto || true
-fi
-if [ -x /usr/sbin/spinand-ubi-auto ]; then
-	# Resolve persistent storage before dependent services start. This makes
-	# Find My Device's backend choice deterministic and avoids an automount race.
-	/usr/sbin/spinand-ubi-auto auto || true
-fi
-if [ -x /usr/sbin/sdcard-auto ]; then
-	/usr/sbin/sdcard-auto &
-elif [ -L /usr/sbin/sdcard ] && [ -x /usr/sbin/sdcard ]; then
-	# Gallery owns sdcard as a symlink and keeps its original watcher policy.
-	/usr/sbin/sdcard watch &
-fi
-if [ -x /usr/bin/display-auto ]; then
-	/usr/bin/display-auto start
-fi
-if [ -x /usr/bin/screen-auto ]; then
-	/usr/bin/screen-auto start
-fi
-if [ -x /usr/bin/find-my-device-start ]; then
-	/usr/bin/find-my-device-start &
-fi
+mkdir -p /run
+for service in /etc/init.d/S??*; do
+	[ -x "$service" ] || continue
+	"$service" start || true
+done
 exec setsid cttyhack /bin/sh -i

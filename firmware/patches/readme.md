@@ -67,7 +67,7 @@ make configure
 Confirm that none of the external example packages is selected:
 
 ```sh
-grep -E '^BR2_PACKAGE_(DISPLAY|DISPLAYDEBUG|FIND_MY_DEVICE|HELLOMK|HELLOMKCPP|IOEXAMPLE[1-8]|PERIPHERY|SLEEPEXAMPLE|USBSERIALDEVICE)=y$' \
+grep -E '^BR2_PACKAGE_(DISPLAY|SYSDIAG|FIND_ME|HELLO_C|HELLO_CPP|HWTOOLS|PERIPHERY|USB_CDC)=y$' \
 	buildroot/.config
 ```
 
@@ -237,7 +237,7 @@ Those files forward the old paths to Linux 6.6's `st/` directory. The custom
 DTS path in `firmware/configs/stm32f429disco.defconfig` remains unchanged:
 
 ```text
-BR2_LINUX_KERNEL_CUSTOM_DTS_PATH="/workspace/firmware/board/stm32f429disco/dts/stm32f429disco-custom.dts"
+BR2_LINUX_KERNEL_CUSTOM_DTS_PATH="/workspace/firmware/board/stm32f429disco/dts/stm32f429disco-unified.dts"
 ```
 
 This arrangement lets Linux 6.1 use its native flat files while Linux 6.6 gets
@@ -308,7 +308,7 @@ make build_all
 Confirm that the DTB was built:
 
 ```text
-buildroot/output/images/stm32f429disco-custom.dtb
+buildroot/output/images/stm32f429disco-unified.dtb
 ```
 
 Do not continue to flashing if the build fails or the expected DTB is missing.
@@ -317,7 +317,7 @@ Do not continue to flashing if the build fails or the expected DTB is missing.
 
 ```sh
 test -s buildroot/output/images/xipImage
-test -s buildroot/output/images/stm32f429disco-custom.dtb
+test -s buildroot/output/images/stm32f429disco-unified.dtb
 stat -c 'xipImage size: %s bytes' buildroot/output/images/xipImage
 ```
 
@@ -444,7 +444,7 @@ Verify the resolved source version and DTB:
 
 ```sh
 grep '^BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE=' buildroot/.config
-test -s buildroot/output/images/stm32f429disco-custom.dtb
+test -s buildroot/output/images/stm32f429disco-unified.dtb
 ```
 
 Repeat the image-size gate from section 7. Do not flash an oversized latest

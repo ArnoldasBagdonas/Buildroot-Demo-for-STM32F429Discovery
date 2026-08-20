@@ -15,19 +15,16 @@ define DISPLAY_BUILD_CMDS
 endef
 
 # Linux is parsed before br2-external package makefiles. Appending here makes
-# the display kernel configuration and DTB follow the package selection while
-# leaving the tracked minimal kernel and device tree unchanged.
+# the display kernel configuration follow the package selection.
 ifeq ($(BR2_PACKAGE_DISPLAY),y)
 LINUX_KCONFIG_FRAGMENT_FILES += \
 	$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/linux-display.config
-LINUX_DTS_NAME += stm32f429disco-display
 
-define DISPLAY_COPY_DTS
-	$(INSTALL) -D -m 0644 \
-		$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/dts/stm32f429disco-display.dts \
-		$(LINUX_ARCH_PATH)/boot/dts/stm32f429disco-display.dts
-endef
-LINUX_PRE_BUILD_HOOKS += DISPLAY_COPY_DTS
+ifeq ($(BR2_PACKAGE_DISPLAY_COMPRESS_INITRAMFS),y)
+LINUX_KCONFIG_FRAGMENT_FILES += \
+	$(BR2_EXTERNAL_FIRMWARE_PATH)/board/stm32f429disco/linux-initramfs-gzip.config
+endif
+
 endif
 
 define DISPLAY_INSTALL_TARGET_CMDS
@@ -37,11 +34,14 @@ define DISPLAY_INSTALL_TARGET_CMDS
 	$(INSTALL) -d -m 0755 $(TARGET_DIR)/usr/share/display
 	$(INSTALL) -m 0644 $(@D)/images/*.png $(@D)/images/*.jpg \
 		$(@D)/images/*.gif $(TARGET_DIR)/usr/share/display/
+	$(RM) -f $(TARGET_DIR)/etc/init.d/S30display
 endef
 
 ifeq ($(BR2_PACKAGE_DISPLAY_AUTOSTART),y)
 define DISPLAY_INSTALL_AUTOSTART
 	ln -sf display $(TARGET_DIR)/usr/bin/display-auto
+	$(INSTALL) -D -m 0755 $(@D)/S30display \
+		$(TARGET_DIR)/etc/init.d/S30display
 endef
 DISPLAY_POST_INSTALL_TARGET_HOOKS += DISPLAY_INSTALL_AUTOSTART
 endif

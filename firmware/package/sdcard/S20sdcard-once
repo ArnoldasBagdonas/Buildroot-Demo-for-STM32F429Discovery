@@ -1,0 +1,9 @@
+#!/bin/sh
+
+case "${1:-}" in
+	start) /usr/sbin/sdcard mount ;;
+	stop) /usr/sbin/sdcard unmount ;;
+	restart) /usr/sbin/sdcard unmount; /usr/sbin/sdcard mount ;;
+	status) /usr/sbin/sdcard status ;;
+	*) echo "Usage: $0 {start|stop|restart|status}" >&2; exit 2 ;;
+esac

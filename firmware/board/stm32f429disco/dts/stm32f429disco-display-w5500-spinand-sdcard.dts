@@ -1,4 +1,0 @@
-#include "stm32f429disco-display.dts"
-#include "stm32f429disco-spinand.dtsi"
-#include "stm32f429disco-sdcard.dtsi"
-#include "stm32f429disco-find-my-device-config.dtsi"

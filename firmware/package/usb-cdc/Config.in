@@ -1,0 +1,12 @@
+config BR2_PACKAGE_USB_CDC
+	bool "USB CDC ACM data-port example"
+	help
+	  Configure the STM32F429 Discovery USB USER connector as a CDC ACM
+	  serial device. The connector uses the OTG HS controller's internal
+	  full-speed PHY. On the host it normally appears as /dev/ttyACM0;
+	  on the board it is /dev/ttyGS0.
+
+	  USART1 remains the Linux console. Use ttyGS0 as an independent data
+	  port for manual transfers or run usb-cdc to echo host data back.
+	  Connect the host to the board's USB USER micro-AB connector, not the
+	  ST-LINK USB connector.
