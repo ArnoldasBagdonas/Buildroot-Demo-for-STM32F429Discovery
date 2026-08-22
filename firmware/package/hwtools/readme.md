@@ -35,3 +35,22 @@ reset to test the `pressed` state.
 
 Applets select only the kernel interfaces they need. Applets using
 c-periphery select the hidden `periphery` package automatically.
+
+## Why `boot-button` needs an AFBOOT patch
+
+The USER button is a transient boot condition: sampling PA0 after Linux and
+userspace start cannot tell whether it was held at reset because it may already
+have been released. AFBOOT therefore samples PA0, copies the flash DTB into a
+reserved 32 KiB region at the top of SDRAM, updates the preallocated
+`/chosen/bootloader,user-button` property, and passes the RAM DTB address to
+Linux in ARM register `r2`. See
+[`0005-stm32f429-pass-user-button-in-device-tree.patch`](../../board/stm32f429disco/patches/afboot-stm32/0005-stm32f429-pass-user-button-in-device-tree.patch).
+
+The [STM32F429I-DISC1 board manual, UM1670](https://www.st.com/resource/en/user_manual/um1670-discovery-kit-with-stm32f429zi-mcu-stmicroelectronics.pdf)
+identifies B1 USER on PA0. The
+[Devicetree specification](https://devicetree-specification.readthedocs.io/en/latest/chapter3-devicenodes.html#chosen-node)
+defines `/chosen` as runtime information selected by system firmware, and the
+[Linux ARM boot protocol](https://docs.kernel.org/arch/arm/booting.html)
+requires the bootloader to place the initialized DTB in RAM and pass its
+physical address in `r2`. This is a boot-time handoff feature, not a workaround
+for a manufacturer defect.

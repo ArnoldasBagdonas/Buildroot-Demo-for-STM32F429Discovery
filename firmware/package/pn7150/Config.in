@@ -1,0 +1,35 @@
+menuconfig BR2_PACKAGE_NFC
+	bool "NFC"
+	help
+	  Enable NFC controller examples and their related options.
+
+if BR2_PACKAGE_NFC
+
+menuconfig BR2_PACKAGE_PN7150
+	bool "NXP PN7150 demo"
+	help
+	  Build pn7150-demo, a board-specific PN7150/OM5578 initialization,
+	  tag-discovery, and NDEF-reading example. It ports NXP's SW4325
+	  Cortex-M NCI/NDEF library to Linux I2C3 and GPIO character devices.
+	  PC8 is VEN and PB7 is IRQ. NCI frames are printed for bring-up.
+
+	  Download SW4325.zip from NXP after accepting its license and place
+	  it in the workspace root. The restricted vendor source is consumed
+	  locally and is not redistributed by this package.
+
+	  PN7150 uses I2C, not SPI; no chip-select signal is required.
+
+if BR2_PACKAGE_PN7150
+
+config BR2_PACKAGE_PN7150_IRQ_POLLING_FALLBACK
+	bool "10 ms IRQ polling fallback"
+	help
+	  Keep Linux GPIO rising-edge events as the primary IRQ mechanism,
+	  but sample the IRQ level whenever an event has not arrived within
+	  10 ms. This provides a fallback on STM32 GPIO/EXTI configurations
+	  that accept an edge-event request but do not deliver the event.
+	  Leave this disabled for normal interrupt-driven operation.
+
+endif
+
+endif

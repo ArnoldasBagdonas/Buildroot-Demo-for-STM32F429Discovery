@@ -9,6 +9,36 @@ supported board wiring; each package enables only the kernel drivers and
 BusyBox commands it needs. `sysdiag` is the exception: it enables additional
 kernel and BusyBox diagnostics for debugging.
 
+## Source-patch map
+
+Most example packages add application code and Buildroot, Linux, or BusyBox
+configuration fragments only. Source patches are limited to the integrations
+below. Their detailed issue, root cause, solution, and evidence are kept with
+the affected package so that a configuration workaround is not mistaken for a
+silicon erratum.
+
+| Affected package | Patched source | Why it is needed |
+|---|---|---|
+| All Linux 6.6 images | Linux DTS include compatibility | Buildroot 2024.02 copies the external DTS into the flat `arch/arm/boot/dts` directory, while Linux 6.6 moved STM32 includes into `dts/st`. Two forwarding includes preserve the external DTS across both layouts. |
+| `display`, `gallery` | `fbv` 1.0b | Add noninteractive slideshow operation, reduce large JPEGs during decode, and clear pixels outside each new image. |
+| `networking`, `find-me` | Linux W5100/W5500 driver | Read real PHY carrier, make TX completion reliable, stabilize the asynchronous RX byte count, and recover a receive event whose level interrupt produced no new STM32 EXTI edge. |
+| `NFC` | Linux STM32F4 I2C and pinctrl | Release the I2C bus after a PN7150 read-address NACK and clock SYSCFG while programming PB7-to-EXTI7 routing. |
+| `usb-cdc` | AFBOOT and Linux DWC2 | Leave the unwired ULPI clock off, select the embedded full-speed PHY before reset, and complete gadget OUT transfers in the order observed on STM32F429. |
+| `hwtools` (`boot-button`) | AFBOOT | Copy the DTB to RAM and add the USER-button state sampled at boot to `/chosen`. |
+
+The DTS compatibility patch is
+[`0004-arm-dts-stm32f429-add-flat-include-compatibility.patch`](../board/stm32f429disco/linux-patches/linux-6.6.151/0004-arm-dts-stm32f429-add-flat-include-compatibility.patch).
+This is a Buildroot/Linux source-layout compatibility fix, not a hardware
+workaround: Buildroot's custom-DTS implementation places files in the flat DTS
+directory, while the [Linux 6.6 STM32 sources are under `dts/st`](https://github.com/torvalds/linux/tree/v6.6/arch/arm/boot/dts/st).
+The forwarding files contain only includes, so the SoC description still has a
+single authoritative copy.
+
+`hello-c`, `hello-cpp`, `firmware-screen`, `screen`, `sdcard`, `spinand`,
+`spinor`, `sysdiag`, and the hidden `periphery` library require no third-party
+source patches. Their package READMEs therefore document behavior and wiring,
+not a patch rationale.
+
 ## Isolated image results
 
 | Package | Capabilities | `xipImage` |
@@ -26,6 +56,7 @@ kernel and BusyBox diagnostics for debugging.
 | `networking` | Kernel and BusyBox networking with the SPI5 W5500 controller enabled by default. | 1,703,993 bytes |
 | `find-me` | W5500 IPv4/DHCP, mDNS discovery, onboarding/OAuth service, gzip initramfs, boot autostart, and configurable persistent-state backends. | 1,709,661 bytes |
 | `usb-cdc` | USB USER connector as a CDC ACM data port, `/dev/ttyGS0`, and the `usb-cdc` echo example. | 1,333,924 bytes |
+| `NFC` | NXP PN7150/OM5578 demo with NCI/NDEF initialization, tag discovery, and NDEF decoding over I2C3. | 1,197,179 bytes |
 
 `periphery` is a hidden static-library dependency selected by the `i2c-scan`,
 `spi-gyro`, `rcc-clock`, `pwm-led`, and `uart-send` hwtools applets. It does not
@@ -91,5 +122,6 @@ Common target commands are:
 | `networking` | `ifconfig -a` | `-a` lists every interface, including interfaces that are down. Standard BusyBox `ifconfig` address and interface arguments are also available. |
 | `find-me` | `find-me-service status` | Service action is `start`, `stop`, `restart`, or `status`. This command links to the boot script `S40find-me`. The daemon also accepts `--interface`, `--port`, `--state`, `--name`, `--model`, GPIO, test-address, and test-device-ID options; run `find-me --help` for the selected backend flags. |
 | `usb-cdc` | `usb-cdc` | `[device]`; defaults to `/dev/ttyGS0` and echoes received bytes until interrupted. |
+| `NFC` | `pn7150-demo` | `info` initializes the controller; `poll` waits for one tag using GPIO IRQ events with an optional 10 ms level fallback, decodes its NDEF message, and exits. |
 
 Package-specific wiring and usage are documented in each package directory.

@@ -41,6 +41,11 @@
 	clock-frequency = <8000000>;
 };
 
+&pinctrl {
+	clocks = <&rcc 0 STM32F4_APB2_CLOCK(SYSCFG)>;
+	clock-names = "irqmux";
+};
+
 &adc {
 	pinctrl-names = "default";
 	pinctrl-0 = <&adc1_in13_pc3_pin>;

@@ -48,3 +48,12 @@ Mounted SD, SPI-NOR/JFFS2, and SPI-NAND/UBIFS filesystems may also store state.
 If no persistent backend is available, the service uses the RAM-backed root
 filesystem for that boot. See [the package overview](../readme.md) for build
 and image-size information.
+
+## W5500 patch dependency
+
+Find-me selects Networking and therefore relies on its W5500 Linux fixes. They
+were developed from failures visible in this workload: DHCP transmit could
+stall, periodic authorization requests exposed an unstable receive-size read,
+and masked level interrupts could leave an RX frame pending. See
+[Networking's issue, solution, and manufacturer evidence](../networking/readme.md#why-the-w5500-driver-is-patched).
+Find-me itself does not patch third-party source.

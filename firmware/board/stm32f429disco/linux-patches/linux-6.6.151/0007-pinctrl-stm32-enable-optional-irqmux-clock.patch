@@ -1,0 +1,36 @@
+From 6a66aa994c20b079c530741b83c26073c17caa79 Mon Sep 17 00:00:00 2001
+From: Buildroot STM32F429 demo <noreply@example.com>
+Date: Sat, 22 Aug 2026 09:00:00 +0300
+Subject: [PATCH] pinctrl: stm32: enable optional IRQ mux clock
+
+Some STM32 boot flows leave the SYSCFG peripheral clock disabled.  In that
+case regmap writes which select the GPIO bank for an EXTI line are silently
+ignored, leaving all lines routed to GPIOA.
+
+Allow a pinctrl node to provide an irqmux clock and keep it enabled while
+the pin controller can update EXTI routing.
+
+Signed-off-by: Buildroot STM32F429 demo <noreply@example.com>
+---
+ drivers/pinctrl/stm32/pinctrl-stm32.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/pinctrl/stm32/pinctrl-stm32.c b/drivers/pinctrl/stm32/pinctrl-stm32.c
+index 346a31f00131..f86b50dcbe6a 100644
+--- a/drivers/pinctrl/stm32/pinctrl-stm32.c
++++ b/drivers/pinctrl/stm32/pinctrl-stm32.c
+@@ -1429,6 +1429,12 @@ static int stm32_pctrl_dt_setup_irq(struct platform_device *pdev,
+ 	int offset, ret, i;
+ 	int mask, mask_width;
++	struct clk *irqmux_clk;
++
++	irqmux_clk = devm_clk_get_optional_enabled(dev, "irqmux");
++	if (IS_ERR(irqmux_clk))
++		return dev_err_probe(dev, PTR_ERR(irqmux_clk),
++				     "failed to enable irq mux clock\n");
+ 
+ 	pctl->regmap = syscon_regmap_lookup_by_phandle(np, "st,syscfg");
+ 	if (IS_ERR(pctl->regmap))
+ 		return PTR_ERR(pctl->regmap);
+-- 
+2.43.0
